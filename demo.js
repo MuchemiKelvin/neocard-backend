@@ -10,7 +10,7 @@
 const axios = require('axios');
 const { isValidUID } = require('./utils');
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL || 'https://neocard-backend.onrender.com';
 const API_KEY = 'neocard_admin_demo_key_2024';
 
 // Colors for console output

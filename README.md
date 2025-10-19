@@ -20,6 +20,8 @@ A secure, lightweight backend API for the Neo Card™ demo-day presentation, inc
 - `GET /v1/stats` - Get scan statistics (admin only)
 - `GET /health` - Health check endpoint
 
+**Live API:** https://neocard-backend.onrender.com
+
 ## 🛠️ Installation
 
 1. **Clone the repository**
@@ -137,7 +139,7 @@ For testing purposes:
 ### Register a Scan
 
 ```bash
-curl -X POST http://localhost:3000/v1/scan \
+curl -X POST https://neocard-backend.onrender.com/v1/scan \
   -H "Content-Type: application/json" \
   -d '{"uid":"TEST123456","campaign_id":"DEMO01"}'
 ```
@@ -145,14 +147,14 @@ curl -X POST http://localhost:3000/v1/scan \
 ### Get Logs (Admin)
 
 ```bash
-curl -X GET http://localhost:3000/v1/logs \
+curl -X GET https://neocard-backend.onrender.com/v1/logs \
   -H "x-api-key: neocard_admin_demo_key_2024"
 ```
 
 ### Export CSV
 
 ```bash
-curl -X GET http://localhost:3000/v1/export/csv \
+curl -X GET https://neocard-backend.onrender.com/v1/export/csv \
   -H "x-api-key: neocard_admin_demo_key_2024" \
   -o scans.csv
 ```

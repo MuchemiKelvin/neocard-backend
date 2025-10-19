@@ -33,6 +33,7 @@ npm start
 - **Start Command**: `npm start`
 - **Auto-Deploy**: Yes (from main branch)
 - **Health Check Path**: `/health`
+- **Live URL**: https://neocard-backend.onrender.com
 
 ## Database
 

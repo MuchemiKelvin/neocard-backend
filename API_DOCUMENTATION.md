@@ -7,7 +7,7 @@ The Neo Card™ Demo Backend is a secure, lightweight API system for the Neo Car
 ## Base URL
 
 - **Local Development**: `http://localhost:3000`
-- **Production**: `https://your-render-app.onrender.com`
+- **Production**: `https://neocard-backend.onrender.com`
 
 ## Authentication
 
