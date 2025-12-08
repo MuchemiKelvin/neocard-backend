@@ -45,6 +45,21 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/v1', require('./routes/api'));
 
+// AI routes
+app.use('/ai', require('./routes/ai'));
+
+// User Management routes
+app.use('/v1/users', require('./routes/users'));
+
+// Role Management routes
+app.use('/v1/roles', require('./routes/roles'));
+
+// Hardware Management routes
+app.use('/v1/hardware', require('./routes/hardware'));
+
+// NeoCare Dashboard routes
+app.use('/neocare', require('./routes/neocare'));
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({

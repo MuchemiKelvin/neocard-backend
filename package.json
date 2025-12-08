@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "demo": "node demo.js"
+    "demo": "node demo.js",
+    "test:ai": "node test-ai-integration.js"
   },
   "keywords": [
     "neocard",

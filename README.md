@@ -1,6 +1,6 @@
 # Neo Card™ Demo Backend – AEI Secure Lite Version
 
-A secure, lightweight backend API for the Neo Card™ demo-day presentation, including AEI encryption, anti-fraud logic, and sponsor data export.
+A secure, lightweight backend API for the Neo Card™ demo-day presentation, including AEI encryption, anti-fraud logic, sponsor data export, and **AI Integration for 13 Dashboard Tabs**.
 
 ## 🚀 Features
 
@@ -11,14 +11,48 @@ A secure, lightweight backend API for the Neo Card™ demo-day presentation, inc
 - **CSV Export**: Daily scan data export for sponsors
 - **SQLite Database**: Lightweight, file-based database
 - **Comprehensive Testing**: 17 test cases covering all functionality
+- **🤖 AI Integration**: 13 dashboard tabs with AI analysis capabilities
+- **Tab 9 Special Features**: Print and proof triggers for Sponsor NeoCard Dashboard
+- **🏥 NeoCare Integration**: Multi-role workforce system with 11 care roles
+- **👥 User Management**: Complete user CRUD operations with role assignment
+- **🔧 Hardware Mapping**: Assign NeoCam V1, Fall Alarm V1, Fingerprint Device to users
+- **🔄 Auto-Sync**: NeoCard → NeoCare synchronization for users, roles, and hardware
+- **📊 NeoCare Dashboard**: Backend endpoints for all 13 NeoCare dashboard tabs
 
 ## 📋 API Endpoints
+
+### Core Neo Card Endpoints
 
 - `POST /v1/scan` - Register UID, timestamp, and campaign ID
 - `GET /v1/logs` - Display recent scans (admin only)
 - `GET /v1/export/csv` - Export daily scan data for sponsors
 - `GET /v1/stats` - Get scan statistics (admin only)
 - `GET /health` - Health check endpoint
+
+### 🤖 AI Integration Endpoints
+
+- `POST /ai/analyze` - AI analysis for any of 13 dashboard tabs
+- `GET /ai/tabs` - Get all available AI tabs
+- `GET /ai/tabs/:id` - Get specific tab information
+- `POST /ai/tabs/9/print` - Tab 9 print trigger
+- `POST /ai/tabs/9/proof` - Tab 9 proof generation
+- `GET /ai/requests` - Get AI requests with filtering
+- `GET /ai/health` - AI service health check
+
+### 🏥 NeoCare Integration Endpoints
+
+- `POST /v1/users` - Create user
+- `GET /v1/users` - Get all users
+- `GET /v1/users/:userId` - Get user by ID
+- `PUT /v1/users/:userId` - Update user
+- `POST /v1/users/:userId/role` - Assign role to user
+- `GET /v1/roles` - Get all care roles
+- `GET /v1/roles/:roleId` - Get role by ID
+- `POST /v1/hardware/devices` - Create hardware device
+- `POST /v1/hardware/assign` - Assign hardware to user
+- `GET /neocare/users` - Get users for NeoCare Dashboard
+- `GET /neocare/tabs/1-13` - NeoCare dashboard tabs endpoints
+- `GET /neocare/sync/users` - Get unsynced users
 
 **Live API:** https://neocard-backend.onrender.com
 
@@ -56,10 +90,22 @@ A secure, lightweight backend API for the Neo Card™ demo-day presentation, inc
 
 ## 🧪 Testing
 
-Run the comprehensive test suite:
+### Core API Testing
 
 ```bash
 npm test
+```
+
+### AI Integration Testing
+
+```bash
+npm run test:ai
+```
+
+### Demo Script
+
+```bash
+npm run demo
 ```
 
 **Test Coverage:**
@@ -70,6 +116,9 @@ npm test
 - ✅ API key authentication
 - ✅ CSV export functionality
 - ✅ Statistics retrieval
+- ✅ **AI Integration** - All 13 dashboard tabs
+- ✅ **Tab 9 Special Features** - Print and proof triggers
+- ✅ **AEI Security** - Checksum generation and verification
 - ✅ AEI security validation
 - ✅ Error handling scenarios
 
@@ -122,7 +171,8 @@ See [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md) for detailed deployment instr
 ## 📚 Documentation
 
 - [API Documentation](./API_DOCUMENTATION.md) - Complete API reference
-- [Render Deployment Guide](./RENDER_DEPLOYMENT.md) - Production deployment
+- [NeoCare Integration](./docs/NEOCARE_INTEGRATION.md) - NeoCare Dashboard API documentation
+- [AI Integration](./docs/AI_INTEGRATION_COMPLETE.md) - AI integration documentation
 - [Environment Configuration](./env.example) - Environment variables
 
 ## 🔑 Demo API Keys

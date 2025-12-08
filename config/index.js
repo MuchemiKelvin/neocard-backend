@@ -35,6 +35,21 @@ const config = {
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100
+  },
+
+  // AI Integration configuration
+  ai: {
+    mode: process.env.AI_MODE || 'mock', // 'mock' or 'live'
+    provider: {
+      apiKey: process.env.AI_PROVIDER_API_KEY || '',
+      url: process.env.AI_PROVIDER_URL || 'https://api.ai-provider.com/v1',
+      timeout: parseInt(process.env.AI_RESPONSE_TIMEOUT) || 30000, // 30 seconds
+      maxRetries: parseInt(process.env.AI_MAX_RETRIES) || 3
+    },
+    tabs: {
+      total: 13,
+      specialTabs: [9] // Tab 9 has special print/proof functionality
+    }
   }
 };
 
