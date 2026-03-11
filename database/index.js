@@ -219,6 +219,73 @@ class Database {
         FOREIGN KEY (client_id) REFERENCES clients(client_id)
       );
 
+      -- NeoCare AI Proof Events table (for all AI operations)
+      CREATE TABLE IF NOT EXISTS neocare_proof_events (
+        id TEXT PRIMARY KEY,
+        tab_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        user_uid TEXT NOT NULL,
+        session_id TEXT,
+        input_json TEXT NOT NULL,
+        output_json TEXT NOT NULL,
+        hash TEXT UNIQUE NOT NULL,
+        audit_status TEXT DEFAULT 'RECORDED',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- NeoCare Certificates table (for Tab 4)
+      CREATE TABLE IF NOT EXISTS neocare_certificates (
+        id TEXT PRIMARY KEY,
+        certificate_type TEXT NOT NULL,
+        user_uid TEXT NOT NULL,
+        session_id TEXT,
+        subject_id TEXT,
+        procedure_code TEXT,
+        status TEXT DEFAULT 'CERTIFIED',
+        payload_json TEXT NOT NULL,
+        proof_hash TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- NeoCare AI Video Assets table (for Tab 6)
+      CREATE TABLE IF NOT EXISTS neocare_ai_video_assets (
+        id TEXT PRIMARY KEY,
+        procedure_code TEXT NOT NULL,
+        title TEXT NOT NULL,
+        duration_sec INTEGER,
+        ref TEXT NOT NULL,
+        language TEXT,
+        context TEXT,
+        priority INTEGER DEFAULT 0,
+        risk_tags TEXT,
+        tags TEXT,
+        is_active BOOLEAN DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Sponsor Blocks table (for Tab 3)
+      CREATE TABLE IF NOT EXISTS sponsor_blocks (
+        id TEXT PRIMARY KEY,
+        status TEXT DEFAULT 'NOT_SOLD',
+        starts_at DATETIME,
+        ends_at DATETIME,
+        sponsor_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Episode Gates table (for Tab 3)
+      CREATE TABLE IF NOT EXISTS episode_gates (
+        episode_id TEXT PRIMARY KEY,
+        is_unlocked BOOLEAN DEFAULT 0,
+        unlock_until DATETIME,
+        block_target INTEGER DEFAULT 10000,
+        block_progress INTEGER DEFAULT 0,
+        buffer_count INTEGER DEFAULT 0,
+        last_block_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
       -- Create indexes for better performance
       CREATE INDEX IF NOT EXISTS idx_scans_uid ON scans(uid);
       CREATE INDEX IF NOT EXISTS idx_scans_campaign ON scans(campaign_id);
@@ -240,6 +307,14 @@ class Database {
       CREATE INDEX IF NOT EXISTS idx_clients_client_id ON clients(client_id);
       CREATE INDEX IF NOT EXISTS idx_client_assignments_user_id ON client_assignments(user_id);
       CREATE INDEX IF NOT EXISTS idx_client_assignments_client_id ON client_assignments(client_id);
+      CREATE INDEX IF NOT EXISTS idx_neocare_proof_events_user_uid ON neocare_proof_events(user_uid);
+      CREATE INDEX IF NOT EXISTS idx_neocare_proof_events_tab_id ON neocare_proof_events(tab_id);
+      CREATE INDEX IF NOT EXISTS idx_neocare_proof_events_hash ON neocare_proof_events(hash);
+      CREATE INDEX IF NOT EXISTS idx_neocare_proof_events_created_at ON neocare_proof_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_neocare_certificates_user_uid ON neocare_certificates(user_uid);
+      CREATE INDEX IF NOT EXISTS idx_neocare_certificates_type ON neocare_certificates(certificate_type);
+      CREATE INDEX IF NOT EXISTS idx_neocare_ai_video_assets_procedure ON neocare_ai_video_assets(procedure_code);
+      CREATE INDEX IF NOT EXISTS idx_neocare_ai_video_assets_active ON neocare_ai_video_assets(is_active);
     `;
 
     return new Promise((resolve, reject) => {
@@ -1239,6 +1314,360 @@ class Database {
           reject(err);
         } else {
           resolve(rows);
+        }
+      });
+    });
+  }
+
+  // ==================== NEOCARE AI METHODS ====================
+
+  async createProofEvent(eventData) {
+    const sql = `
+      INSERT INTO neocare_proof_events (id, tab_id, action, user_uid, session_id, input_json, output_json, hash, audit_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        eventData.id,
+        eventData.tab_id,
+        eventData.action,
+        eventData.user_uid,
+        eventData.session_id || null,
+        JSON.stringify(eventData.input_json),
+        JSON.stringify(eventData.output_json),
+        eventData.hash,
+        eventData.audit_status || 'RECORDED'
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: eventData.id });
+        }
+      });
+    });
+  }
+
+  async getProofEvents(filters = {}) {
+    let sql = 'SELECT * FROM neocare_proof_events WHERE 1=1';
+    const params = [];
+
+    if (filters.user_uid) {
+      sql += ' AND user_uid = ?';
+      params.push(filters.user_uid);
+    }
+
+    if (filters.tab_id) {
+      sql += ' AND tab_id = ?';
+      params.push(filters.tab_id);
+    }
+
+    if (filters.session_id) {
+      sql += ' AND session_id = ?';
+      params.push(filters.session_id);
+    }
+
+    if (filters.from) {
+      sql += ' AND created_at >= ?';
+      params.push(filters.from);
+    }
+
+    if (filters.to) {
+      sql += ' AND created_at <= ?';
+      params.push(filters.to);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      sql += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          const events = rows.map(row => ({
+            ...row,
+            input_json: JSON.parse(row.input_json),
+            output_json: JSON.parse(row.output_json)
+          }));
+          resolve(events);
+        }
+      });
+    });
+  }
+
+  async createCertificate(certData) {
+    const sql = `
+      INSERT INTO neocare_certificates (id, certificate_type, user_uid, session_id, subject_id, procedure_code, status, payload_json, proof_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        certData.id,
+        certData.certificate_type,
+        certData.user_uid,
+        certData.session_id || null,
+        certData.subject_id || null,
+        certData.procedure_code || null,
+        certData.status || 'CERTIFIED',
+        JSON.stringify(certData.payload_json),
+        certData.proof_hash
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: certData.id });
+        }
+      });
+    });
+  }
+
+  async getCertificates(filters = {}) {
+    let sql = 'SELECT * FROM neocare_certificates WHERE 1=1';
+    const params = [];
+
+    if (filters.user_uid) {
+      sql += ' AND user_uid = ?';
+      params.push(filters.user_uid);
+    }
+
+    if (filters.certificate_type) {
+      sql += ' AND certificate_type = ?';
+      params.push(filters.certificate_type);
+    }
+
+    if (filters.from) {
+      sql += ' AND created_at >= ?';
+      params.push(filters.from);
+    }
+
+    if (filters.to) {
+      sql += ' AND created_at <= ?';
+      params.push(filters.to);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      sql += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          const certs = rows.map(row => ({
+            ...row,
+            payload_json: JSON.parse(row.payload_json)
+          }));
+          resolve(certs);
+        }
+      });
+    });
+  }
+
+  async createAiVideoAsset(assetData) {
+    const sql = `
+      INSERT INTO neocare_ai_video_assets (id, procedure_code, title, duration_sec, ref, language, context, priority, risk_tags, tags, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        assetData.id,
+        assetData.procedure_code,
+        assetData.title,
+        assetData.duration_sec || null,
+        assetData.ref,
+        assetData.language || null,
+        assetData.context || null,
+        assetData.priority || 0,
+        assetData.risk_tags ? JSON.stringify(assetData.risk_tags) : null,
+        assetData.tags ? JSON.stringify(assetData.tags) : null,
+        assetData.is_active !== undefined ? assetData.is_active : 1
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: assetData.id });
+        }
+      });
+    });
+  }
+
+  async getAiVideoAssets(filters = {}) {
+    let sql = 'SELECT * FROM neocare_ai_video_assets WHERE 1=1';
+    const params = [];
+
+    if (filters.procedure_code) {
+      sql += ' AND procedure_code = ?';
+      params.push(filters.procedure_code);
+    }
+
+    if (filters.is_active !== undefined) {
+      sql += ' AND is_active = ?';
+      params.push(filters.is_active ? 1 : 0);
+    }
+
+    if (filters.context) {
+      sql += ' AND (context IS NULL OR context = ?)';
+      params.push(filters.context);
+    }
+
+    sql += ' ORDER BY priority DESC, created_at DESC';
+
+    if (filters.limit) {
+      sql += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          const assets = rows.map(row => ({
+            ...row,
+            risk_tags: row.risk_tags ? JSON.parse(row.risk_tags) : [],
+            tags: row.tags ? JSON.parse(row.tags) : []
+          }));
+          resolve(assets);
+        }
+      });
+    });
+  }
+
+  async createSponsorBlock(blockData) {
+    const sql = `
+      INSERT INTO sponsor_blocks (id, status, starts_at, ends_at, sponsor_id)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        blockData.id,
+        blockData.status || 'NOT_SOLD',
+        blockData.starts_at || null,
+        blockData.ends_at || null,
+        blockData.sponsor_id || null
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: blockData.id });
+        }
+      });
+    });
+  }
+
+  async getSponsorBlocks(filters = {}) {
+    let sql = 'SELECT * FROM sponsor_blocks WHERE 1=1';
+    const params = [];
+
+    if (filters.status) {
+      sql += ' AND status = ?';
+      params.push(filters.status);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+
+  async createEpisodeGate(gateData) {
+    const sql = `
+      INSERT INTO episode_gates (episode_id, is_unlocked, unlock_until, block_target, block_progress, buffer_count, last_block_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        gateData.episode_id,
+        gateData.is_unlocked ? 1 : 0,
+        gateData.unlock_until || null,
+        gateData.block_target || 10000,
+        gateData.block_progress || 0,
+        gateData.buffer_count || 0,
+        gateData.last_block_id || null
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ episode_id: gateData.episode_id });
+        }
+      });
+    });
+  }
+
+  async getEpisodeGate(episodeId) {
+    const sql = 'SELECT * FROM episode_gates WHERE episode_id = ?';
+    
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, [episodeId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async updateEpisodeGate(episodeId, updateData) {
+    const updates = [];
+    const params = [];
+
+    if (updateData.is_unlocked !== undefined) {
+      updates.push('is_unlocked = ?');
+      params.push(updateData.is_unlocked ? 1 : 0);
+    }
+
+    if (updateData.unlock_until !== undefined) {
+      updates.push('unlock_until = ?');
+      params.push(updateData.unlock_until);
+    }
+
+    if (updateData.block_progress !== undefined) {
+      updates.push('block_progress = ?');
+      params.push(updateData.block_progress);
+    }
+
+    if (updateData.buffer_count !== undefined) {
+      updates.push('buffer_count = ?');
+      params.push(updateData.buffer_count);
+    }
+
+    if (updateData.last_block_id !== undefined) {
+      updates.push('last_block_id = ?');
+      params.push(updateData.last_block_id);
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(episodeId);
+
+    const sql = `UPDATE episode_gates SET ${updates.join(', ')} WHERE episode_id = ?`;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, params, function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
         }
       });
     });
