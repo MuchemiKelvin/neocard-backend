@@ -3,6 +3,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const config = require('../config');
+const { generateApiKey } = require('../utils');
 
 class Database {
   constructor() {
@@ -160,6 +161,8 @@ class Database {
         device_name TEXT NOT NULL,
         serial_number TEXT,
         firmware_version TEXT,
+        api_key TEXT UNIQUE,
+        last_seen DATETIME,
         status TEXT DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -174,6 +177,24 @@ class Database {
         unassigned_at DATETIME,
         active BOOLEAN DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id),
+        FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id)
+      );
+
+      -- Fingerprint enrollments table
+      CREATE TABLE IF NOT EXISTS fingerprint_enrollments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        enrollment_id TEXT UNIQUE NOT NULL,
+        user_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        fingerprint_slot INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_verified_at DATETIME,
+        verification_count INTEGER DEFAULT 0,
+        created_by TEXT,
+        notes TEXT,
         FOREIGN KEY (user_id) REFERENCES users(user_id),
         FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id)
       );
@@ -302,6 +323,11 @@ class Database {
       CREATE INDEX IF NOT EXISTS idx_users_neocard_uid ON users(neocard_uid);
       CREATE INDEX IF NOT EXISTS idx_hardware_mappings_user_id ON hardware_mappings(user_id);
       CREATE INDEX IF NOT EXISTS idx_hardware_mappings_device_id ON hardware_mappings(device_id);
+      CREATE INDEX IF NOT EXISTS idx_fingerprint_user ON fingerprint_enrollments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_fingerprint_device ON fingerprint_enrollments(device_id);
+      CREATE INDEX IF NOT EXISTS idx_fingerprint_slot ON fingerprint_enrollments(fingerprint_slot);
+      CREATE INDEX IF NOT EXISTS idx_fingerprint_status ON fingerprint_enrollments(status);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_device_slot_unique ON fingerprint_enrollments(device_id, fingerprint_slot);
       CREATE INDEX IF NOT EXISTS idx_sync_logs_entity_id ON sync_logs(entity_id);
       CREATE INDEX IF NOT EXISTS idx_sync_logs_sync_type ON sync_logs(sync_type);
       CREATE INDEX IF NOT EXISTS idx_clients_client_id ON clients(client_id);
@@ -324,8 +350,74 @@ class Database {
           reject(err);
         } else {
           console.log('Database tables initialized');
-          this.seedInitialData().then(resolve).catch(reject);
+          this.runMigrations()
+            .then(() => this.seedInitialData())
+            .then(resolve)
+            .catch(reject);
         }
+      });
+    });
+  }
+
+  async runMigrations() {
+    await this.addColumnIfMissing('hardware_devices', 'api_key', 'TEXT');
+    await this.addColumnIfMissing('hardware_devices', 'last_seen', 'DATETIME');
+
+    await this.execSql(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_hardware_devices_api_key
+      ON hardware_devices(api_key)
+    `);
+
+    await this.backfillDeviceApiKeys();
+    console.log('Database migrations applied');
+  }
+
+  async addColumnIfMissing(table, column, type) {
+    const columns = await this.allSql(`PRAGMA table_info(${table})`);
+    const exists = columns.some((col) => col.name === column);
+
+    if (!exists) {
+      await this.execSql(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    }
+  }
+
+  async backfillDeviceApiKeys() {
+    const devices = await this.allSql(
+      'SELECT device_id FROM hardware_devices WHERE api_key IS NULL'
+    );
+
+    for (const device of devices) {
+      const apiKey = generateApiKey('kdvc');
+      await this.runSql(
+        'UPDATE hardware_devices SET api_key = ? WHERE device_id = ?',
+        [apiKey, device.device_id]
+      );
+    }
+  }
+
+  execSql(sql) {
+    return new Promise((resolve, reject) => {
+      this.db.exec(sql, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  runSql(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, params, function(err) {
+        if (err) reject(err);
+        else resolve({ changes: this.changes, lastID: this.lastID });
+      });
+    });
+  }
+
+  allSql(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
       });
     });
   }
@@ -986,9 +1078,18 @@ class Database {
   // ==================== HARDWARE MANAGEMENT METHODS ====================
 
   async createHardwareDevice(deviceData) {
+    const apiKey = deviceData.api_key || generateApiKey('kdvc');
     const sql = `
-      INSERT INTO hardware_devices (device_id, device_type, device_name, serial_number, firmware_version, status)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO hardware_devices (
+        device_id,
+        device_type,
+        device_name,
+        serial_number,
+        firmware_version,
+        api_key,
+        status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
 
     return new Promise((resolve, reject) => {
@@ -998,12 +1099,55 @@ class Database {
         deviceData.device_name,
         deviceData.serial_number || null,
         deviceData.firmware_version || null,
+        apiKey,
         deviceData.status || 'active'
       ], function(err) {
         if (err) {
           reject(err);
         } else {
-          resolve({ id: this.lastID, device_id: deviceData.device_id });
+          resolve({
+            id: this.lastID,
+            device_id: deviceData.device_id,
+            api_key: apiKey
+          });
+        }
+      });
+    });
+  }
+
+  async getHardwareDeviceByApiKey(apiKey) {
+    const sql = `
+      SELECT *
+      FROM hardware_devices
+      WHERE api_key = ?
+        AND status = 'active'
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, [apiKey], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async updateDeviceLastSeen(deviceId) {
+    const sql = `
+      UPDATE hardware_devices
+      SET last_seen = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE device_id = ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [deviceId], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
         }
       });
     });
@@ -1134,6 +1278,217 @@ class Database {
           reject(err);
         } else {
           resolve(rows);
+        }
+      });
+    });
+  }
+
+  async isHardwareAssignedToUser(userId, deviceId) {
+    const sql = `
+      SELECT *
+      FROM hardware_mappings
+      WHERE user_id = ?
+        AND device_id = ?
+        AND active = 1
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, [userId, deviceId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(!!row);
+        }
+      });
+    });
+  }
+
+  // ==================== FINGERPRINT ENROLLMENT METHODS ====================
+
+  async createFingerprintEnrollment(enrollmentData) {
+    const sql = `
+      INSERT INTO fingerprint_enrollments (
+        enrollment_id,
+        user_id,
+        device_id,
+        fingerprint_slot,
+        status,
+        created_by,
+        notes
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        enrollmentData.enrollment_id,
+        enrollmentData.user_id,
+        enrollmentData.device_id,
+        enrollmentData.fingerprint_slot,
+        enrollmentData.status || 'ACTIVE',
+        enrollmentData.created_by || null,
+        enrollmentData.notes || null
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({
+            id: this.lastID,
+            enrollment_id: enrollmentData.enrollment_id
+          });
+        }
+      });
+    });
+  }
+
+  async getFingerprintEnrollment(enrollmentId) {
+    const sql = `
+      SELECT *
+      FROM fingerprint_enrollments
+      WHERE enrollment_id = ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, [enrollmentId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async getFingerprintEnrollmentByUser(userId) {
+    const sql = `
+      SELECT *
+      FROM fingerprint_enrollments
+      WHERE user_id = ?
+      ORDER BY enrolled_at DESC
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, [userId], (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+
+  async getFingerprintEnrollmentByDeviceSlot(deviceId, fingerprintSlot) {
+    const sql = `
+      SELECT *
+      FROM fingerprint_enrollments
+      WHERE device_id = ?
+        AND fingerprint_slot = ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, [deviceId, fingerprintSlot], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async getAllFingerprintEnrollments(filters = {}) {
+    let sql = `SELECT * FROM fingerprint_enrollments WHERE 1=1`;
+    const params = [];
+
+    if (filters.status) {
+      sql += ` AND status = ?`;
+      params.push(filters.status);
+    }
+
+    if (filters.device_id) {
+      sql += ` AND device_id = ?`;
+      params.push(filters.device_id);
+    }
+
+    sql += ` ORDER BY enrolled_at DESC`;
+
+    if (filters.limit) {
+      sql += ` LIMIT ?`;
+      params.push(filters.limit);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+
+  async updateFingerprintEnrollment(enrollmentId, data) {
+    const sql = `
+      UPDATE fingerprint_enrollments
+      SET
+        status = ?,
+        notes = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE enrollment_id = ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        data.status,
+        data.notes || null,
+        enrollmentId
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
+        }
+      });
+    });
+  }
+
+  async deactivateFingerprintEnrollment(enrollmentId) {
+    const sql = `
+      UPDATE fingerprint_enrollments
+      SET
+        status = 'INACTIVE',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE enrollment_id = ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [enrollmentId], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
+        }
+      });
+    });
+  }
+
+  async incrementVerificationCount(enrollmentId) {
+    const sql = `
+      UPDATE fingerprint_enrollments
+      SET
+        verification_count = verification_count + 1,
+        last_verified_at = CURRENT_TIMESTAMP
+      WHERE enrollment_id = ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [enrollmentId], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
         }
       });
     });

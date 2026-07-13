@@ -57,6 +57,9 @@ app.use('/v1/roles', require('./routes/roles'));
 // Hardware Management routes
 app.use('/v1/hardware', require('./routes/hardware'));
 
+// Fingerprint Management routes
+app.use('/v1/fingerprints', require('./routes/fingerprints'));
+
 // NeoCare Dashboard routes
 app.use('/neocare', require('./routes/neocare'));
 

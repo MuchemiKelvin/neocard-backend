@@ -5,6 +5,48 @@ const config = require('../config');
 const db = require('../database');
 
 /**
+ * Device API key authentication middleware
+ * Validates per-device API keys for hardware terminals (e.g. Raspberry Pi)
+ */
+const authenticateDeviceApiKey = async (req, res, next) => {
+  const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+
+  if (!apiKey) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Device API key required',
+      code: 'MISSING_DEVICE_API_KEY'
+    });
+  }
+
+  try {
+    const device = await db.getHardwareDeviceByApiKey(apiKey);
+
+    if (!device) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid or inactive device API key',
+        code: 'INVALID_DEVICE_API_KEY'
+      });
+    }
+
+    await db.updateDeviceLastSeen(device.device_id);
+
+    req.device = device;
+    req.deviceId = device.device_id;
+    req.apiKey = apiKey;
+    next();
+  } catch (error) {
+    console.error('Device API key validation error:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Device API key validation failed',
+      code: 'VALIDATION_ERROR'
+    });
+  }
+};
+
+/**
  * API Key authentication middleware
  * Validates API key for admin endpoints
  */
@@ -152,6 +194,7 @@ const requestLogger = (req, res, next) => {
 
 module.exports = {
   authenticateApiKey,
+  authenticateDeviceApiKey,
   validateScanRequest,
   antiFraudCheck,
   errorLogger,

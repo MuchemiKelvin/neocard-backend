@@ -48,6 +48,11 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/v1', require('../routes/api'));
 
+// User, hardware, fingerprint routes (for integration tests)
+app.use('/v1/users', require('../routes/users'));
+app.use('/v1/hardware', require('../routes/hardware'));
+app.use('/v1/fingerprints', require('../routes/fingerprints'));
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
