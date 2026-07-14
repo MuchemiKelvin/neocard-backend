@@ -266,4 +266,27 @@ describe('Fingerprint Validation Service', () => {
       expect(stored.user_id).toBe(userId);
     });
   });
+
+  describe('GET /v1/device/me', () => {
+    test('requires device API key', async () => {
+      const response = await request(app)
+        .get('/v1/device/me')
+        .expect(401);
+
+      expect(response.body.code).toBe('MISSING_DEVICE_API_KEY');
+    });
+
+    test('returns authenticated device without api_key in response', async () => {
+      const response = await request(app)
+        .get('/v1/device/me')
+        .set('x-api-key', apiKey)
+        .expect(200);
+
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.device_id).toBe(deviceId);
+      expect(response.body.data.device_name).toBe('Test R503 Terminal');
+      expect(response.body.data.device_type).toBe('fingerprint_device');
+      expect(response.body.data.api_key).toBeUndefined();
+    });
+  });
 });

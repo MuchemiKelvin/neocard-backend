@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticateApiKey } = require('../middleware');
+const { authenticateApiKey, authenticateDeviceApiKey } = require('../middleware');
 const { formatResponse } = require('../utils');
 const db = require('../database');
 const crypto = require('crypto');
@@ -289,6 +289,33 @@ router.get('/users/:userId', authenticateApiKey, async (req, res) => {
     res.status(500).json(formatResponse(
       false,
       'Failed to retrieve user hardware',
+      null,
+      { error: error.message }
+    ));
+  }
+});
+
+
+/**
+ * GET /v1/hardware/me
+ * Return the authenticated Raspberry Pi / hardware terminal.
+ * Uses device API key (kdvc_...), not admin API key.
+ */
+router.get('/me', authenticateDeviceApiKey, async (req, res) => {
+  try {
+    const device = { ...req.device };
+    delete device.api_key;
+
+    res.json(formatResponse(
+      true,
+      'Device retrieved successfully',
+      device
+    ));
+  } catch (error) {
+    console.error('Get authenticated device error:', error);
+    res.status(500).json(formatResponse(
+      false,
+      'Failed to retrieve device',
       null,
       { error: error.message }
     ));

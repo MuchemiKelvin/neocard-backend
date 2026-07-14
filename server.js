@@ -54,8 +54,11 @@ app.use('/v1/users', require('./routes/users'));
 // Role Management routes
 app.use('/v1/roles', require('./routes/roles'));
 
-// Hardware Management routes
+// Hardware Management routes (admin API key)
 app.use('/v1/hardware', require('./routes/hardware'));
+
+// Device terminal routes (device API key — Raspberry Pi)
+app.use('/v1/device', require('./routes/device'));
 
 // Fingerprint Management routes
 app.use('/v1/fingerprints', require('./routes/fingerprints'));
