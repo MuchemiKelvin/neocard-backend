@@ -4,6 +4,7 @@ const router = express.Router();
 const database = require("../database");
 const { authenticateDeviceApiKey } = require("../middleware");
 const FingerprintValidation = require("../services/fingerprintValidation");
+const FingerprintVerification = require("../services/fingerprintVerification");
 
 router.post("/enroll", authenticateDeviceApiKey, async (req, res) => {
   try {
@@ -45,6 +46,42 @@ router.post("/enroll", authenticateDeviceApiKey, async (req, res) => {
     return res.status(error.status || 500).json({
       success: false,
       message: error.message,
+      ...(error.code && { code: error.code })
+    });
+  }
+});
+
+/**
+ * POST /v1/fingerprints/verify
+ * Stage 3: resolve R503 slot match to NeoCard user (device API key).
+ * Must be registered before /:enrollmentId.
+ */
+router.post("/verify", authenticateDeviceApiKey, async (req, res) => {
+  try {
+    const data = await FingerprintVerification.verify(req.body, req.device);
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification successful",
+      data
+    });
+  } catch (error) {
+    if (!error.status) {
+      try {
+        await FingerprintVerification.logAttempt({
+          device_id: req.device?.device_id || req.body?.device_id,
+          fingerprint_slot: req.body?.fingerprint_slot,
+          confidence: req.body?.confidence,
+          result: "ERROR"
+        });
+      } catch (logError) {
+        console.error("Failed to write verification ERROR log:", logError);
+      }
+    }
+
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Verification failed",
       ...(error.code && { code: error.code })
     });
   }

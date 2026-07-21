@@ -199,6 +199,22 @@ class Database {
         FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id)
       );
 
+      -- Fingerprint verification attempt logs (Stage 3)
+      CREATE TABLE IF NOT EXISTS verification_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        verification_id TEXT UNIQUE NOT NULL,
+        device_id TEXT NOT NULL,
+        user_id TEXT,
+        fingerprint_slot INTEGER,
+        confidence INTEGER,
+        result TEXT NOT NULL,
+        verified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id),
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+      );
+
       -- Sync logs table (NeoCard → NeoCare synchronization)
       CREATE TABLE IF NOT EXISTS sync_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -328,6 +344,10 @@ class Database {
       CREATE INDEX IF NOT EXISTS idx_fingerprint_slot ON fingerprint_enrollments(fingerprint_slot);
       CREATE INDEX IF NOT EXISTS idx_fingerprint_status ON fingerprint_enrollments(status);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_device_slot_unique ON fingerprint_enrollments(device_id, fingerprint_slot);
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_device ON verification_logs(device_id);
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_user ON verification_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_result ON verification_logs(result);
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_verified_at ON verification_logs(verified_at);
       CREATE INDEX IF NOT EXISTS idx_sync_logs_entity_id ON sync_logs(entity_id);
       CREATE INDEX IF NOT EXISTS idx_sync_logs_sync_type ON sync_logs(sync_type);
       CREATE INDEX IF NOT EXISTS idx_clients_client_id ON clients(client_id);
@@ -366,6 +386,37 @@ class Database {
     await this.execSql(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_hardware_devices_api_key
       ON hardware_devices(api_key)
+    `);
+
+    // Stage 3: verification attempt logs (existing DBs)
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS verification_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        verification_id TEXT UNIQUE NOT NULL,
+        device_id TEXT NOT NULL,
+        user_id TEXT,
+        fingerprint_slot INTEGER,
+        confidence INTEGER,
+        result TEXT NOT NULL,
+        verified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id),
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+      )
+    `);
+
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_device ON verification_logs(device_id)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_user ON verification_logs(user_id)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_result ON verification_logs(result)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_verification_logs_verified_at ON verification_logs(verified_at)
     `);
 
     await this.backfillDeviceApiKeys();
@@ -1479,7 +1530,8 @@ class Database {
       UPDATE fingerprint_enrollments
       SET
         verification_count = verification_count + 1,
-        last_verified_at = CURRENT_TIMESTAMP
+        last_verified_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
       WHERE enrollment_id = ?
     `;
 
@@ -1489,6 +1541,106 @@ class Database {
           reject(err);
         } else {
           resolve({ changes: this.changes });
+        }
+      });
+    });
+  }
+
+  /**
+   * Active enrollment for device+slot, joined with user (Stage 3 verify).
+   */
+  async getActiveEnrollmentWithUserByDeviceSlot(deviceId, fingerprintSlot) {
+    const sql = `
+      SELECT
+        fe.*,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.active AS user_active
+      FROM fingerprint_enrollments fe
+      JOIN users u ON u.user_id = fe.user_id
+      WHERE fe.device_id = ?
+        AND fe.fingerprint_slot = ?
+        AND fe.status = 'ACTIVE'
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, [deviceId, fingerprintSlot], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  async createVerificationLog(logData) {
+    const sql = `
+      INSERT INTO verification_logs (
+        verification_id,
+        device_id,
+        user_id,
+        fingerprint_slot,
+        confidence,
+        result
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        logData.verification_id,
+        logData.device_id,
+        logData.user_id || null,
+        logData.fingerprint_slot ?? null,
+        logData.confidence ?? null,
+        logData.result
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({
+            id: this.lastID,
+            verification_id: logData.verification_id
+          });
+        }
+      });
+    });
+  }
+
+  async getVerificationLogs(filters = {}) {
+    let sql = `SELECT * FROM verification_logs WHERE 1=1`;
+    const params = [];
+
+    if (filters.device_id) {
+      sql += ` AND device_id = ?`;
+      params.push(filters.device_id);
+    }
+
+    if (filters.user_id) {
+      sql += ` AND user_id = ?`;
+      params.push(filters.user_id);
+    }
+
+    if (filters.result) {
+      sql += ` AND result = ?`;
+      params.push(filters.result);
+    }
+
+    sql += ` ORDER BY verified_at DESC`;
+
+    if (filters.limit) {
+      sql += ` LIMIT ?`;
+      params.push(parseInt(filters.limit, 10));
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
         }
       });
     });

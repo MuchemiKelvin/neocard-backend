@@ -24,6 +24,7 @@ describe('Fingerprint Validation Service', () => {
   });
 
   beforeEach(async () => {
+    await db.runSql('DELETE FROM verification_logs');
     await db.runSql('DELETE FROM fingerprint_enrollments');
     await db.runSql('DELETE FROM hardware_mappings');
     await db.runSql('DELETE FROM hardware_devices');
@@ -287,6 +288,116 @@ describe('Fingerprint Validation Service', () => {
       expect(response.body.data.device_name).toBe('Test R503 Terminal');
       expect(response.body.data.device_type).toBe('fingerprint_device');
       expect(response.body.data.api_key).toBeUndefined();
+    });
+  });
+
+  describe('POST /v1/fingerprints/verify', () => {
+    const enrollSlot = async (slot = 2) => {
+      const enrollmentId = `ENR_VERIFY_${Date.now()}_${slot}`;
+      await db.createFingerprintEnrollment({
+        enrollment_id: enrollmentId,
+        user_id: userId,
+        device_id: deviceId,
+        fingerprint_slot: slot,
+        status: 'ACTIVE'
+      });
+      return enrollmentId;
+    };
+
+    test('requires device API key', async () => {
+      const response = await request(app)
+        .post('/v1/fingerprints/verify')
+        .send({ device_id: deviceId, fingerprint_slot: 2 })
+        .expect(401);
+
+      expect(response.body.code).toBe('MISSING_DEVICE_API_KEY');
+    });
+
+    test('returns 404 when fingerprint slot is unknown', async () => {
+      const response = await request(app)
+        .post('/v1/fingerprints/verify')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 99,
+          confidence: 100
+        })
+        .expect(404);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Fingerprint not recognized');
+      expect(response.body.code).toBe('FINGERPRINT_NOT_RECOGNIZED');
+
+      const logs = await db.getVerificationLogs({ device_id: deviceId });
+      expect(logs[0].result).toBe('UNKNOWN');
+    });
+
+    test('returns user and increments verification_count on success', async () => {
+      const enrollmentId = await enrollSlot(2);
+
+      const response = await request(app)
+        .post('/v1/fingerprints/verify')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 2,
+          confidence: 167
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Verification successful');
+      expect(response.body.data.user_id).toBe(userId);
+      expect(response.body.data.first_name).toBe('Fingerprint');
+      expect(response.body.data.last_name).toBe('Tester');
+      expect(response.body.data.status).toBe('ACTIVE');
+      expect(response.body.data.fingerprint_slot).toBe(2);
+
+      const stored = await db.getFingerprintEnrollment(enrollmentId);
+      expect(stored.verification_count).toBe(1);
+      expect(stored.last_verified_at).toBeTruthy();
+
+      const logs = await db.getVerificationLogs({ device_id: deviceId });
+      expect(logs[0].result).toBe('SUCCESS');
+      expect(logs[0].user_id).toBe(userId);
+      expect(logs[0].confidence).toBe(167);
+    });
+
+    test('returns 403 when user is inactive', async () => {
+      await enrollSlot(2);
+      await db.runSql('UPDATE users SET active = 0 WHERE user_id = ?', [userId]);
+
+      const response = await request(app)
+        .post('/v1/fingerprints/verify')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 2,
+          confidence: 120
+        })
+        .expect(403);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('User inactive');
+      expect(response.body.code).toBe('USER_INACTIVE');
+
+      const logs = await db.getVerificationLogs({ device_id: deviceId });
+      expect(logs[0].result).toBe('FAILED');
+    });
+
+    test('rejects device_id mismatch', async () => {
+      await enrollSlot(2);
+
+      const response = await request(app)
+        .post('/v1/fingerprints/verify')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: 'fp_test_other_device',
+          fingerprint_slot: 2
+        })
+        .expect(403);
+
+      expect(response.body.code).toBe('DEVICE_ID_MISMATCH');
     });
   });
 });
