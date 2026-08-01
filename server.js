@@ -63,6 +63,9 @@ app.use('/v1/device', require('./routes/device'));
 // Fingerprint Management routes
 app.use('/v1/fingerprints', require('./routes/fingerprints'));
 
+// NeoCard terminal transactions (device API key)
+app.use('/v1/neocard', require('./routes/neocard'));
+
 // NeoCare Dashboard routes
 app.use('/neocare', require('./routes/neocare'));
 

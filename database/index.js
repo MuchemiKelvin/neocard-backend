@@ -215,6 +215,22 @@ class Database {
         FOREIGN KEY (user_id) REFERENCES users(user_id)
       );
 
+      -- NeoCard terminal transactions (Stage 4)
+      CREATE TABLE IF NOT EXISTS neocard_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id TEXT UNIQUE NOT NULL,
+        transaction_type TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        verification_id TEXT,
+        fingerprint_slot INTEGER,
+        occurred_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id),
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+      );
+
       -- Sync logs table (NeoCard → NeoCare synchronization)
       CREATE TABLE IF NOT EXISTS sync_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -417,6 +433,36 @@ class Database {
     `);
     await this.execSql(`
       CREATE INDEX IF NOT EXISTS idx_verification_logs_verified_at ON verification_logs(verified_at)
+    `);
+
+    // Stage 4: NeoCard transactions
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS neocard_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id TEXT UNIQUE NOT NULL,
+        transaction_type TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        verification_id TEXT,
+        fingerprint_slot INTEGER,
+        occurred_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id),
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+      )
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_neocard_transactions_device ON neocard_transactions(device_id)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_neocard_transactions_user ON neocard_transactions(user_id)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_neocard_transactions_type ON neocard_transactions(transaction_type)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_neocard_transactions_occurred ON neocard_transactions(occurred_at)
     `);
 
     await this.backfillDeviceApiKeys();
@@ -1642,6 +1688,93 @@ class Database {
         } else {
           resolve(rows);
         }
+      });
+    });
+  }
+
+  async createNeocardTransaction(tx) {
+    const sql = `
+      INSERT INTO neocard_transactions (
+        transaction_id,
+        transaction_type,
+        device_id,
+        user_id,
+        verification_id,
+        fingerprint_slot,
+        occurred_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [
+        tx.transaction_id,
+        tx.transaction_type,
+        tx.device_id,
+        tx.user_id,
+        tx.verification_id || null,
+        tx.fingerprint_slot ?? null,
+        tx.occurred_at || null
+      ], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({
+            id: this.lastID,
+            transaction_id: tx.transaction_id,
+            transaction_type: tx.transaction_type,
+            device_id: tx.device_id,
+            user_id: tx.user_id,
+            verification_id: tx.verification_id || null,
+            fingerprint_slot: tx.fingerprint_slot ?? null,
+            occurred_at: tx.occurred_at || null
+          });
+        }
+      });
+    });
+  }
+
+  async getNeocardTransaction(transactionId) {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT * FROM neocard_transactions WHERE transaction_id = ?',
+        [transactionId],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+  }
+
+  async getNeocardTransactions(filters = {}) {
+    let sql = `SELECT * FROM neocard_transactions WHERE 1=1`;
+    const params = [];
+
+    if (filters.device_id) {
+      sql += ` AND device_id = ?`;
+      params.push(filters.device_id);
+    }
+    if (filters.user_id) {
+      sql += ` AND user_id = ?`;
+      params.push(filters.user_id);
+    }
+    if (filters.transaction_type) {
+      sql += ` AND transaction_type = ?`;
+      params.push(filters.transaction_type);
+    }
+
+    sql += ` ORDER BY created_at DESC`;
+
+    if (filters.limit) {
+      sql += ` LIMIT ?`;
+      params.push(parseInt(filters.limit, 10));
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
       });
     });
   }

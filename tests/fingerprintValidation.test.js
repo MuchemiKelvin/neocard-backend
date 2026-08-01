@@ -24,6 +24,7 @@ describe('Fingerprint Validation Service', () => {
   });
 
   beforeEach(async () => {
+    await db.runSql('DELETE FROM neocard_transactions');
     await db.runSql('DELETE FROM verification_logs');
     await db.runSql('DELETE FROM fingerprint_enrollments');
     await db.runSql('DELETE FROM hardware_mappings');
@@ -398,6 +399,71 @@ describe('Fingerprint Validation Service', () => {
         .expect(403);
 
       expect(response.body.code).toBe('DEVICE_ID_MISMATCH');
+    });
+  });
+
+  describe('POST /v1/neocard/checkin', () => {
+    const enrollSlot = async (slot = 2) => {
+      await db.createFingerprintEnrollment({
+        enrollment_id: `ENR_CHECKIN_${Date.now()}_${slot}`,
+        user_id: userId,
+        device_id: deviceId,
+        fingerprint_slot: slot,
+        status: 'ACTIVE'
+      });
+    };
+
+    test('records CHECK_IN transaction for enrolled slot', async () => {
+      await enrollSlot(2);
+
+      const response = await request(app)
+        .post('/v1/neocard/checkin')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 2,
+          transaction_type: 'CHECK_IN'
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.user.id).toBe(userId);
+      expect(response.body.user.name).toContain('Fingerprint');
+      expect(response.body.transaction.type).toBe('CHECK_IN');
+      expect(response.body.transaction.id).toMatch(/^TXN-/);
+
+      const rows = await db.getNeocardTransactions({ device_id: deviceId });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].user_id).toBe(userId);
+    });
+
+    test('rejects unknown slot', async () => {
+      const response = await request(app)
+        .post('/v1/neocard/checkin')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 99
+        })
+        .expect(404);
+
+      expect(response.body.code).toBe('FINGERPRINT_NOT_RECOGNIZED');
+    });
+
+    test('rejects invalid transaction_type', async () => {
+      await enrollSlot(2);
+
+      const response = await request(app)
+        .post('/v1/neocard/checkin')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 2,
+          transaction_type: 'INVALID'
+        })
+        .expect(400);
+
+      expect(response.body.code).toBe('INVALID_TRANSACTION_TYPE');
     });
   });
 });
