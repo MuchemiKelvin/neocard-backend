@@ -422,7 +422,8 @@ describe('Fingerprint Validation Service', () => {
         .send({
           device_id: deviceId,
           fingerprint_slot: 2,
-          transaction_type: 'CHECK_IN'
+          transaction_type: 'CHECK_IN',
+          metadata: { deviceName: 'KDVC-RPI-001', firmware: '1.0.0' }
         })
         .expect(201);
 
@@ -430,11 +431,45 @@ describe('Fingerprint Validation Service', () => {
       expect(response.body.user.id).toBe(userId);
       expect(response.body.user.name).toContain('Fingerprint');
       expect(response.body.transaction.type).toBe('CHECK_IN');
-      expect(response.body.transaction.id).toMatch(/^TXN-/);
+      expect(response.body.transaction.status).toBe('SUCCESS');
+      expect(response.body.transaction.verification_method).toBe('FINGERPRINT');
+      expect(response.body.transaction.id).toBeTruthy();
 
       const rows = await db.getNeocardTransactions({ device_id: deviceId });
       expect(rows).toHaveLength(1);
       expect(rows[0].user_id).toBe(userId);
+      expect(rows[0].status).toBe('SUCCESS');
+    });
+
+    test('is idempotent when the same transaction_id is retried', async () => {
+      await enrollSlot(2);
+      const transactionId = '11111111-2222-3333-4444-555555555555';
+
+      const first = await request(app)
+        .post('/v1/neocard/checkin')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 2,
+          transaction_id: transactionId
+        })
+        .expect(201);
+
+      const second = await request(app)
+        .post('/v1/neocard/checkin')
+        .set('x-api-key', apiKey)
+        .send({
+          device_id: deviceId,
+          fingerprint_slot: 2,
+          transaction_id: transactionId
+        })
+        .expect(201);
+
+      expect(first.body.transaction.id).toBe(transactionId);
+      expect(second.body.transaction.id).toBe(transactionId);
+
+      const rows = await db.getNeocardTransactions({ device_id: deviceId });
+      expect(rows).toHaveLength(1);
     });
 
     test('rejects unknown slot', async () => {

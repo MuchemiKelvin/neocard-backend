@@ -215,16 +215,20 @@ class Database {
         FOREIGN KEY (user_id) REFERENCES users(user_id)
       );
 
-      -- NeoCard terminal transactions (Stage 4)
+      -- NeoCard terminal transactions (Stage 4 — system of record)
       CREATE TABLE IF NOT EXISTS neocard_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         transaction_id TEXT UNIQUE NOT NULL,
         transaction_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'SUCCESS',
         device_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         verification_id TEXT,
         fingerprint_slot INTEGER,
+        verification_method TEXT NOT NULL DEFAULT 'FINGERPRINT',
+        metadata TEXT,
         occurred_at DATETIME,
+        verified_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id),
@@ -435,23 +439,32 @@ class Database {
       CREATE INDEX IF NOT EXISTS idx_verification_logs_verified_at ON verification_logs(verified_at)
     `);
 
-    // Stage 4: NeoCard transactions
+    // Stage 4: NeoCard transactions (system of record)
     await this.execSql(`
       CREATE TABLE IF NOT EXISTS neocard_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         transaction_id TEXT UNIQUE NOT NULL,
         transaction_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'SUCCESS',
         device_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         verification_id TEXT,
         fingerprint_slot INTEGER,
+        verification_method TEXT NOT NULL DEFAULT 'FINGERPRINT',
+        metadata TEXT,
         occurred_at DATETIME,
+        verified_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id),
         FOREIGN KEY (user_id) REFERENCES users(user_id)
       )
     `);
+    await this.addColumnIfMissing('neocard_transactions', 'status', "TEXT DEFAULT 'SUCCESS'");
+    await this.addColumnIfMissing('neocard_transactions', 'verification_method', "TEXT DEFAULT 'FINGERPRINT'");
+    await this.addColumnIfMissing('neocard_transactions', 'metadata', 'TEXT');
+    await this.addColumnIfMissing('neocard_transactions', 'verified_at', 'DATETIME');
+
     await this.execSql(`
       CREATE INDEX IF NOT EXISTS idx_neocard_transactions_device ON neocard_transactions(device_id)
     `);
@@ -460,6 +473,9 @@ class Database {
     `);
     await this.execSql(`
       CREATE INDEX IF NOT EXISTS idx_neocard_transactions_type ON neocard_transactions(transaction_type)
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_neocard_transactions_status ON neocard_transactions(status)
     `);
     await this.execSql(`
       CREATE INDEX IF NOT EXISTS idx_neocard_transactions_occurred ON neocard_transactions(occurred_at)
@@ -1697,24 +1713,39 @@ class Database {
       INSERT INTO neocard_transactions (
         transaction_id,
         transaction_type,
+        status,
         device_id,
         user_id,
         verification_id,
         fingerprint_slot,
-        occurred_at
+        verification_method,
+        metadata,
+        occurred_at,
+        verified_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
     `;
+
+    const metadata =
+      typeof tx.metadata === 'string'
+        ? tx.metadata
+        : tx.metadata
+          ? JSON.stringify(tx.metadata)
+          : null;
 
     return new Promise((resolve, reject) => {
       this.db.run(sql, [
         tx.transaction_id,
         tx.transaction_type,
+        tx.status || 'SUCCESS',
         tx.device_id,
         tx.user_id,
         tx.verification_id || null,
         tx.fingerprint_slot ?? null,
-        tx.occurred_at || null
+        tx.verification_method || 'FINGERPRINT',
+        metadata,
+        tx.occurred_at || null,
+        tx.verified_at || null
       ], function(err) {
         if (err) {
           reject(err);
@@ -1723,11 +1754,15 @@ class Database {
             id: this.lastID,
             transaction_id: tx.transaction_id,
             transaction_type: tx.transaction_type,
+            status: tx.status || 'SUCCESS',
             device_id: tx.device_id,
             user_id: tx.user_id,
             verification_id: tx.verification_id || null,
             fingerprint_slot: tx.fingerprint_slot ?? null,
-            occurred_at: tx.occurred_at || null
+            verification_method: tx.verification_method || 'FINGERPRINT',
+            metadata,
+            occurred_at: tx.occurred_at || null,
+            verified_at: tx.verified_at || null
           });
         }
       });

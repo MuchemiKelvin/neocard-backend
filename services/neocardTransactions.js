@@ -13,8 +13,16 @@ const TRANSACTION_TYPES = Object.freeze([
   'VISITOR'
 ]);
 
+const TRANSACTION_STATUSES = Object.freeze([
+  'PENDING',
+  'SUCCESS',
+  'FAILED',
+  'OFFLINE',
+  'SYNCED'
+]);
+
 /**
- * Stage 4 NeoCard terminal transactions.
+ * Stage 4 NeoCard terminal transactions — system of record.
  * Identity stays on /v1/fingerprints/verify; this records business actions.
  */
 class NeoCardTransactionService {
@@ -22,16 +30,51 @@ class NeoCardTransactionService {
     return TRANSACTION_TYPES;
   }
 
-  generateTransactionId() {
-    const timestamp = Date.now();
-    const random = crypto.randomBytes(3).toString('hex');
-    return `TXN-${timestamp}-${random}`;
+  get allowedStatuses() {
+    return TRANSACTION_STATUSES;
   }
 
-  /**
-   * @param {object} payload
-   * @param {object} authenticatedDevice - req.device
-   */
+  generateTransactionId() {
+    if (typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `TXN-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
+  }
+
+  _formatResponse(stored, first_name, last_name) {
+    let metadata = stored.metadata || null;
+    if (typeof metadata === 'string') {
+      try {
+        metadata = JSON.parse(metadata);
+      } catch (_) {
+        /* keep raw string */
+      }
+    }
+
+    return {
+      success: true,
+      user: {
+        id: stored.user_id,
+        name: `${first_name || ''} ${last_name || ''}`.trim(),
+        first_name: first_name || null,
+        last_name: last_name || null,
+        type: 'User'
+      },
+      transaction: {
+        id: stored.transaction_id,
+        type: stored.transaction_type,
+        status: stored.status || 'SUCCESS',
+        verification_method: stored.verification_method || 'FINGERPRINT',
+        time: stored.occurred_at || stored.verified_at || stored.created_at,
+        device_id: stored.device_id,
+        fingerprint_slot: stored.fingerprint_slot,
+        verification_id: stored.verification_id,
+        metadata
+      },
+      data: stored
+    };
+  }
+
   async checkIn(payload, authenticatedDevice) {
     return this.recordTransaction(
       { ...payload, transaction_type: payload.transaction_type || 'CHECK_IN' },
@@ -50,6 +93,15 @@ class NeoCardTransactionService {
     const verification_id = payload.verification_id || payload.verificationId || null;
     const user_id_hint = payload.user_id || payload.userId || null;
     const timestamp = payload.timestamp || payload.occurred_at || null;
+    const clientTransactionId =
+      payload.transaction_id || payload.transactionId || payload.client_transaction_id || null;
+    const verification_method = (
+      payload.verification_method ||
+      payload.verificationMethod ||
+      'FINGERPRINT'
+    ).toUpperCase();
+    const status = (payload.status || 'SUCCESS').toUpperCase();
+    const metadata = payload.metadata || null;
 
     if (!device_id) {
       throw new FingerprintValidationError(
@@ -81,6 +133,27 @@ class NeoCardTransactionService {
         `Invalid transaction_type. Allowed: ${TRANSACTION_TYPES.join(', ')}`,
         'INVALID_TRANSACTION_TYPE'
       );
+    }
+
+    if (!TRANSACTION_STATUSES.includes(status)) {
+      throw new FingerprintValidationError(
+        400,
+        `Invalid status. Allowed: ${TRANSACTION_STATUSES.join(', ')}`,
+        'INVALID_TRANSACTION_STATUS'
+      );
+    }
+
+    // Idempotency: same client transaction_id returns existing record
+    if (clientTransactionId) {
+      const existing = await database.getNeocardTransaction(clientTransactionId);
+      if (existing) {
+        const user = await database.getUser(existing.user_id);
+        return this._formatResponse(
+          existing,
+          user?.first_name,
+          user?.last_name
+        );
+      }
     }
 
     let user_id = user_id_hint;
@@ -161,40 +234,26 @@ class NeoCardTransactionService {
       last_name = user.last_name;
     }
 
-    const transaction_id = this.generateTransactionId();
+    const transaction_id = clientTransactionId || this.generateTransactionId();
     const created = await database.createNeocardTransaction({
       transaction_id,
       transaction_type,
+      status,
       device_id,
       user_id,
       verification_id,
       fingerprint_slot: slot,
-      occurred_at: timestamp
+      verification_method,
+      metadata,
+      occurred_at: timestamp,
+      verified_at: timestamp
     });
 
     const stored = await database.getNeocardTransaction(transaction_id);
-
-    return {
-      success: true,
-      user: {
-        id: user_id,
-        name: `${first_name || ''} ${last_name || ''}`.trim(),
-        first_name,
-        last_name,
-        type: 'User'
-      },
-      transaction: {
-        id: transaction_id,
-        type: transaction_type,
-        time: stored?.occurred_at || stored?.created_at || new Date().toISOString(),
-        device_id,
-        fingerprint_slot: slot,
-        verification_id
-      },
-      data: created
-    };
+    return this._formatResponse(stored || created, first_name, last_name);
   }
 }
 
 module.exports = new NeoCardTransactionService();
 module.exports.TRANSACTION_TYPES = TRANSACTION_TYPES;
+module.exports.TRANSACTION_STATUSES = TRANSACTION_STATUSES;
