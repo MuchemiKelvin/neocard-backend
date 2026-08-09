@@ -24,7 +24,9 @@ No API key values are included in this document. Git history was not rewritten. 
 | `API_KEY_EXPOSURE` | **PASS** |
 | `TRANSACTION_IDEMPOTENCY` | **PASS** (covered by check-in tests) |
 | `BACKEND_TESTS` | **PASS** (50/50) |
-| `PI_TESTS` | **PASS** (24/24 software unit tests) |
+| `PI_TESTS` | **PASS** (24/24 via `python -m unittest discover -s tests -p "test*.py"`) |
+| `TEST_DISCOVERY` | **PASS** |
+| `VERIFICATION_COVERAGE` | **PASS** (moved to `tests/unit/`, content preserved) |
 
 ---
 
