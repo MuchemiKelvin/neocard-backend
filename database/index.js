@@ -10,16 +10,36 @@ class Database {
     this.db = null;
   }
 
+  /**
+   * Refuse to open the live demo DB while NODE_ENV=test.
+   * Prevents accidental wipe of production/demo device identity by tests.
+   */
+  assertSafeDatabasePath(dbPath) {
+    const base = path.basename(dbPath);
+    const isTestEnv = process.env.NODE_ENV === 'test';
+    const looksLikeLive = base === 'neocard.db';
+
+    if (isTestEnv && looksLikeLive) {
+      throw new Error(
+        `Refusing to open live database "${dbPath}" while NODE_ENV=test. ` +
+          'Set DB_PATH to an isolated test file (e.g. ./database/test_neocard.db).'
+      );
+    }
+  }
+
   async connect() {
+    const dbPath = path.resolve(config.getDatabasePath());
+    this.assertSafeDatabasePath(dbPath);
+
     return new Promise((resolve, reject) => {
-      const dbPath = path.resolve(config.database.path);
-      
       this.db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
           console.error('Database connection error:', err);
           reject(err);
         } else {
-          console.log('Connected to SQLite database');
+          this.dbPath = dbPath;
+          console.log(`Connected to SQLite database at ${dbPath}`);
+          // CREATE TABLE IF NOT EXISTS + INSERT OR IGNORE only — never deletes the DB file
           this.initializeTables().then(resolve).catch(reject);
         }
       });
@@ -1226,6 +1246,29 @@ class Database {
         }
       });
     });
+  }
+
+  /**
+   * Replace device API key for an existing device_id.
+   * device_id stays stable; old key stops authenticating immediately.
+   * Returns the new key once (caller must deliver it securely to the Pi).
+   */
+  async rotateHardwareDeviceApiKey(deviceId) {
+    const device = await this.getHardwareDevice(deviceId);
+    if (!device) {
+      return null;
+    }
+
+    const apiKey = generateApiKey('kdvc');
+    await this.runSql(
+      'UPDATE hardware_devices SET api_key = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?',
+      [apiKey, deviceId]
+    );
+
+    return {
+      device_id: deviceId,
+      api_key: apiKey
+    };
   }
 
   async getHardwareDeviceByApiKey(apiKey) {

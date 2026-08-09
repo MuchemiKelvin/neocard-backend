@@ -242,7 +242,7 @@ Returns the Pi’s own device record. Used by `kdvc-fingerprint` Sprint 1 / enro
 **Example:**
 ```bash
 curl http://localhost:3000/v1/device/me \
-  -H "x-api-key: kdvc_b801e7bdac5afb6ab8c90ae163648e58"
+  -H "x-api-key: <DEVICE_API_KEY>"
 ```
 
 **Response `200` (shape):**

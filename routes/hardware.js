@@ -22,7 +22,13 @@ function generateDeviceId() {
  */
 router.post('/devices', authenticateApiKey, async (req, res) => {
   try {
-    const { device_type, device_name, serial_number, firmware_version } = req.body;
+    const {
+      device_type,
+      device_name,
+      serial_number,
+      firmware_version,
+      device_id: requestedDeviceId
+    } = req.body;
 
     if (!device_type || !device_name) {
       return res.status(400).json(formatResponse(
@@ -44,7 +50,29 @@ router.post('/devices', authenticateApiKey, async (req, res) => {
       ));
     }
 
-    const deviceId = generateDeviceId();
+    // Optional device_id: restore a known identity. Never accept api_key from client.
+    let deviceId = generateDeviceId();
+    if (requestedDeviceId) {
+      if (!/^device_[A-Za-z0-9_]+$/.test(requestedDeviceId)) {
+        return res.status(400).json(formatResponse(
+          false,
+          'Invalid device_id format',
+          null,
+          { code: 'INVALID_DEVICE_ID' }
+        ));
+      }
+      const existing = await db.getHardwareDevice(requestedDeviceId);
+      if (existing) {
+        return res.status(409).json(formatResponse(
+          false,
+          'Device ID already exists',
+          null,
+          { code: 'DEVICE_ID_EXISTS' }
+        ));
+      }
+      deviceId = requestedDeviceId;
+    }
+
     const deviceData = {
       device_id: deviceId,
       device_type,
@@ -54,13 +82,16 @@ router.post('/devices', authenticateApiKey, async (req, res) => {
       status: 'active'
     };
 
-    await db.createHardwareDevice(deviceData);
+    const created = await db.createHardwareDevice(deviceData);
     const device = await db.getHardwareDevice(deviceId);
+    // Return api_key only at creation / rotate time (never on GET)
+    const { api_key: _ignored, ...safeDevice } = device;
+    const responseDevice = { ...safeDevice, api_key: created.api_key };
 
     res.status(201).json(formatResponse(
       true,
       'Hardware device created successfully',
-      device
+      responseDevice
     ));
 
   } catch (error) {
@@ -87,7 +118,13 @@ router.get('/devices', authenticateApiKey, async (req, res) => {
     if (status) filters.status = status;
     if (limit) filters.limit = parseInt(limit);
 
-    const devices = await db.getAllHardwareDevices(filters);
+    const devices = (await db.getAllHardwareDevices(filters)).map((device) => {
+      const { api_key, ...safe } = device;
+      return {
+        ...safe,
+        has_api_key: Boolean(api_key)
+      };
+    });
 
     res.json(formatResponse(
       true,
@@ -130,12 +167,14 @@ router.get('/devices/:deviceId', authenticateApiKey, async (req, res) => {
 
     // Get users assigned to this device
     const users = await db.getHardwareUsers(deviceId);
-    device.assigned_users = users;
+    const { api_key, ...safeDevice } = device;
+    safeDevice.assigned_users = users;
+    safeDevice.has_api_key = Boolean(api_key);
 
     res.json(formatResponse(
       true,
       'Hardware device retrieved successfully',
-      device
+      safeDevice
     ));
 
   } catch (error) {
@@ -318,6 +357,47 @@ router.get('/me', authenticateDeviceApiKey, async (req, res) => {
       'Failed to retrieve device',
       null,
       { error: error.message }
+    ));
+  }
+});
+
+/**
+ * POST /v1/hardware/devices/:deviceId/rotate-api-key
+ * Admin-only. Keeps device_id stable; replaces api_key.
+ * Returns the new key once — deliver it to the Pi via secure .env update.
+ * Does not print the key to server logs.
+ */
+router.post('/devices/:deviceId/rotate-api-key', authenticateApiKey, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const rotated = await db.rotateHardwareDeviceApiKey(deviceId);
+
+    if (!rotated) {
+      return res.status(404).json(formatResponse(
+        false,
+        'Hardware device not found',
+        null,
+        { code: 'DEVICE_NOT_FOUND' }
+      ));
+    }
+
+    console.log(`Device API key rotated for device_id=${deviceId}`);
+
+    res.json(formatResponse(
+      true,
+      'Device API key rotated successfully. Update the Pi DEVICE_API_KEY securely; old key is invalid.',
+      {
+        device_id: rotated.device_id,
+        api_key: rotated.api_key
+      }
+    ));
+  } catch (error) {
+    console.error('Rotate device API key error:', error.message);
+    res.status(500).json(formatResponse(
+      false,
+      'Failed to rotate device API key',
+      null,
+      { code: 'ROTATE_FAILED' }
     ));
   }
 });

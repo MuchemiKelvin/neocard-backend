@@ -4,10 +4,8 @@ const request = require('supertest');
 const app = require('./app');
 const db = require('../database');
 
-// Set test environment
-process.env.NODE_ENV = 'test';
-process.env.PORT = '0'; // Use random available port for tests
-process.env.DB_PATH = './database/test_neocard.db'; // Use test database
+// Isolated DB: tests/setupEnv.js sets NODE_ENV=test and DB_PATH before load.
+process.env.PORT = '0';
 
 describe('Neo Card™ Demo Backend API Tests', () => {
   beforeAll(async () => {

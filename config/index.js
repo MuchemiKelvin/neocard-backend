@@ -1,4 +1,31 @@
 // Configuration module for Neo Card™ Demo Backend
+// Load .env before reading process.env (server and tools share this module).
+require('dotenv').config();
+
+const DEFAULT_LIVE_DB = './database/neocard.db';
+const DEFAULT_TEST_DB = './database/test_neocard.db';
+
+/**
+ * Resolve SQLite path at call time (not once at module load).
+ * Tests must be able to set DB_PATH before connect() even if config was required early.
+ *
+ * When NODE_ENV=test, never fall through to the live DB path from .env
+ * (dotenv may set DB_PATH=./database/neocard.db).
+ */
+function getDatabasePath() {
+  const configured = process.env.DB_PATH;
+  const base = configured ? require('path').basename(configured) : '';
+
+  if (process.env.NODE_ENV === 'test') {
+    if (configured && base !== 'neocard.db') {
+      return configured;
+    }
+    return DEFAULT_TEST_DB;
+  }
+
+  return configured || DEFAULT_LIVE_DB;
+}
+
 const config = {
   // Server configuration
   server: {
@@ -6,11 +33,17 @@ const config = {
     environment: process.env.NODE_ENV || 'development'
   },
 
-  // Database configuration
+  // Database configuration (path is dynamic — always use getDatabasePath / .path getter)
   database: {
-    path: process.env.DB_PATH || './database/neocard.db',
-    type: 'sqlite'
+    get path() {
+      return getDatabasePath();
+    },
+    type: 'sqlite',
+    liveDefault: DEFAULT_LIVE_DB,
+    testDefault: DEFAULT_TEST_DB
   },
+
+  getDatabasePath,
 
   // Security configuration
   security: {

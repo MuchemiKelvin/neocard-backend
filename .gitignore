@@ -20,6 +20,10 @@ yarn-error.log*
 database/*.db
 database/*.sqlite
 database/*.sqlite3
+database/backups/
+database/**/*.db
+database/**/*.sqlite
+database/**/*.sqlite3
 
 # ==========================
 # Logs

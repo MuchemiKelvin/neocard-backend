@@ -1,3 +1,4 @@
+// Isolated DB: tests/setupEnv.js sets NODE_ENV=test and DB_PATH before load.
 // Fingerprint enrollment validation tests
 
 const request = require('supertest');
@@ -6,8 +7,6 @@ const db = require('../database');
 const FingerprintValidation = require('../services/fingerprintValidation');
 const { FingerprintValidationError } = require('../services/fingerprintValidation');
 
-process.env.NODE_ENV = 'test';
-process.env.DB_PATH = './database/test_neocard.db';
 
 describe('Fingerprint Validation Service', () => {
   let userId;
@@ -289,6 +288,71 @@ describe('Fingerprint Validation Service', () => {
       expect(response.body.data.device_name).toBe('Test R503 Terminal');
       expect(response.body.data.device_type).toBe('fingerprint_device');
       expect(response.body.data.api_key).toBeUndefined();
+    });
+  });
+
+  describe('GET /v1/hardware/devices/:deviceId', () => {
+    test('does not return api_key in admin GET response', async () => {
+      const response = await request(app)
+        .get(`/v1/hardware/devices/${deviceId}`)
+        .set('x-api-key', 'neocard_admin_demo_key_2024')
+        .expect(200);
+
+      expect(response.body.data.device_id).toBe(deviceId);
+      expect(response.body.data.api_key).toBeUndefined();
+      expect(response.body.data.has_api_key).toBe(true);
+    });
+  });
+
+  describe('POST /v1/hardware/devices with explicit device_id', () => {
+    test('restores a known device_id with a freshly generated key', async () => {
+      const restoreId = `device_restore_${Date.now()}_abc123`;
+      const response = await request(app)
+        .post('/v1/hardware/devices')
+        .set('x-api-key', 'neocard_admin_demo_key_2024')
+        .send({
+          device_id: restoreId,
+          device_type: 'fingerprint_device',
+          device_name: 'KDVC-RPI-001',
+          status: 'active'
+        })
+        .expect(201);
+
+      expect(response.body.data.device_id).toBe(restoreId);
+      expect(response.body.data.api_key).toBeTruthy();
+      expect(response.body.data.api_key).not.toBe(apiKey);
+
+      const getResponse = await request(app)
+        .get(`/v1/hardware/devices/${restoreId}`)
+        .set('x-api-key', 'neocard_admin_demo_key_2024')
+        .expect(200);
+      expect(getResponse.body.data.api_key).toBeUndefined();
+    });
+  });
+
+  describe('POST /v1/hardware/devices/:deviceId/rotate-api-key', () => {
+    test('keeps device_id stable, invalidates old key, accepts new key', async () => {
+      const rotated = await request(app)
+        .post(`/v1/hardware/devices/${deviceId}/rotate-api-key`)
+        .set('x-api-key', 'neocard_admin_demo_key_2024')
+        .expect(200);
+
+      expect(rotated.body.data.device_id).toBe(deviceId);
+      expect(rotated.body.data.api_key).toBeTruthy();
+      expect(rotated.body.data.api_key).not.toBe(apiKey);
+
+      const oldKeyRejected = await request(app)
+        .get('/v1/device/me')
+        .set('x-api-key', apiKey)
+        .expect(401);
+      expect(oldKeyRejected.body.code).toBe('INVALID_DEVICE_API_KEY');
+
+      const newKeyAccepted = await request(app)
+        .get('/v1/device/me')
+        .set('x-api-key', rotated.body.data.api_key)
+        .expect(200);
+      expect(newKeyAccepted.body.data.device_id).toBe(deviceId);
+      expect(newKeyAccepted.body.data.api_key).toBeUndefined();
     });
   });
 

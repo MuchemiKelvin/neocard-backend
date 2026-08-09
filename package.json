@@ -9,7 +9,14 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "demo": "node demo.js",
-    "test:ai": "node test-ai-integration.js"
+    "test:ai": "node test-ai-integration.js",
+    "db:backup": "node scripts/backup-db.js"
+  },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/tests/setupEnv.js"
+    ],
+    "testEnvironment": "node"
   },
   "keywords": [
     "neocard",
