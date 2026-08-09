@@ -1,3 +1,39 @@
+# Stage 5 Baseline
+
+This document records Stage 5 known-good checkpoints.
+
+---
+
+## Step 4 baseline (current reference) — ACCEPTED LOCALLY
+
+**Date:** 2026-08-09  
+**Status:** COMPLETE locally  
+**Pi tag:** `stage5-step4-baseline`  
+**Pi commit:** `24c9d77` — `feat(stage5): add offline resilience and transaction synchronization`
+
+### Verified automated results at this baseline
+
+| Suite | Result |
+|-------|--------|
+| Backend `npm test` | **50/50 PASS** |
+| Pi software unittest discover | **64/64 PASS** |
+
+### Step 4 local acceptance
+
+Offline queue, persistence/restart, retry/backoff, error classification, UUID idempotency, multi-transaction sync, partial failure, single-flight sync, shutdown, offline UX, security, and documentation: **PASS**.
+
+Physical Pi validation remains **PENDING**.
+
+### Next phase
+
+**Stage 5 Step 5** — final regression / E2E validation. Do not treat Stage 5 as production-ready until physical validation of this candidate succeeds.
+
+---
+
+## Step 1 freeze (historical)
+
+The following section is the original Step 1 freeze report and is retained for history. **Current known-good reference is Step 4 (`stage5-step4-baseline` / `24c9d77`).**
+
 # Stage 5 Baseline Freeze Report
 
 **Date:** 2026-08-09  
