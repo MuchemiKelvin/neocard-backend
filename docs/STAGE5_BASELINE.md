@@ -22,11 +22,12 @@ This document records Stage 5 known-good checkpoints.
 
 Offline queue, persistence/restart, retry/backoff, error classification, UUID idempotency, multi-transaction sync, partial failure, single-flight sync, shutdown, offline UX, security, and documentation: **PASS**.
 
-Physical Pi validation remains **PENDING**.
+Physical Pi validation: **CORE PASS** (2026-08-12) — see `docs/STAGE5_PHASE_B_PHYSICAL_RESULTS.md`.  
+Open close-out: demo video, optional P-14 reboot, DEFECT-003 (systemd stop timeout).
 
 ### Next phase
 
-**Stage 5 Step 5** — final regression / E2E validation. Do not treat Stage 5 as production-ready until physical validation of this candidate succeeds.
+Stage 5 handover close-out (video + docs pack). Core physical NeoCard path is proven; do not reopen feature scope.
 
 ---
 

@@ -1,10 +1,12 @@
 # Stage 5 — Step 5: Final Regression / E2E Validation
 
-**Status:** IN PROGRESS (local software phase)  
+**Status:** Phase A complete; Phase B core **PASS** (2026-08-12)  
 **Software RC freeze:** `docs/STAGE5_SOFTWARE_RC.md`  
+**Physical results:** `docs/STAGE5_PHASE_B_PHYSICAL_RESULTS.md`  
+**Demo video:** `docs/STAGE5_DEMO_VIDEO.md`  
 **Functional change policy:** **No** production code changes unless this matrix identifies a defect.
 
-Physical Pi validation uses the **same** frozen candidate after local software regression passes.
+Physical Pi validation uses the same candidate (plus Step 6 defect fixes).
 
 ---
 
@@ -70,27 +72,29 @@ Only when laptop backend is up and device key is configured in Pi `.env` (never 
 
 ---
 
-## Phase B — Physical Pi E2E (PENDING — deploy RC first)
+## Phase B — Physical Pi E2E
 
-**PHYSICAL PI = PENDING** until Step 10 deploy of this frozen candidate.
+**Status:** CORE PASS (2026-08-12) — see `docs/STAGE5_PHASE_B_PHYSICAL_RESULTS.md`  
+**Demo video guide:** `docs/STAGE5_DEMO_VIDEO.md`  
+**Open:** DEFECT-003 (systemd stop → SIGKILL); P-14 not re-run; P-13 live optional
 
 | ID | Check | Expected | Result |
 |----|-------|----------|--------|
-| P-01 | Power ON → Raspberry Pi OS | Boots | |
-| P-02 | systemd starts `kdvc-fingerprint` | Active without SSH | |
-| P-03 | App loads `.env` via EnvironmentFile | Auth configured | |
-| P-04 | Hardware init (UART/SPI/I2C/GPIO) | Sensors/display ready | |
-| P-05 | Device authentication | `/v1/device/me` OK | |
-| P-06 | TFT splash → home READY | UI ready | |
-| P-07 | Enrollment (admin path) | Slot enrolled | |
-| P-08 | Known fingerprint | VERIFIED + check-in SUCCESS | |
-| P-09 | NeoCard transaction visible in backend | One row | |
-| P-10 | Unknown fingerprint | Rejected / UNKNOWN | |
-| P-11 | Backend/network loss | Offline UX; queue persists | |
-| P-12 | Network recovery | Sync; status SYNCED | |
-| P-13 | Replay same `transaction_id` | No duplicate | |
-| P-14 | Reboot | Returns READY; queue intact if unsynced | |
-| P-15 | journalctl logs usable; no secrets | PASS | |
+| P-01 | Power ON → Raspberry Pi OS | Boots | **PASS** |
+| P-02 | systemd starts `kdvc-fingerprint` | Active without SSH | **PASS** |
+| P-03 | App loads `.env` via EnvironmentFile | Auth configured | **PASS** |
+| P-04 | Hardware init (UART/SPI/I2C/GPIO) | Sensors/display ready | **PASS** |
+| P-05 | Device authentication | `/v1/device/me` OK | **PASS** |
+| P-06 | TFT splash → home READY | UI ready | **PASS** |
+| P-07 | Enrollment (admin path) | Slot enrolled | **PASS** (slot 1 ACTIVE) |
+| P-08 | Known fingerprint | VERIFIED + check-in SUCCESS | **PASS** |
+| P-09 | NeoCard transaction visible in backend | One row | **PASS** |
+| P-10 | Unknown fingerprint | Rejected / UNKNOWN | **PASS** |
+| P-11 | Backend/network loss | Offline UX; queue persists | **PASS** |
+| P-12 | Network recovery | Sync; status SYNCED | **PASS** |
+| P-13 | Replay same `transaction_id` | No duplicate | **PASS (software)**; live optional |
+| P-14 | Reboot | Returns READY; queue intact if unsynced | **NOT RE-RUN** |
+| P-15 | journalctl logs usable; no secrets | PASS | **PASS** |
 
 ---
 

@@ -6,6 +6,10 @@
 **HEAD at execution:** `f8400fe`  
 **Lab environment:** Laptop; backend not listening on `:3000` during startup probe; **no** Raspberry Pi / R503 / TFT attached.
 
+> **Phase B update (2026-08-12):** Physical Pi E2E core path is **PASS**.  
+> See `docs/STAGE5_PHASE_B_PHYSICAL_RESULTS.md` and `docs/STAGE5_DEMO_VIDEO.md`.  
+> Open: DEFECT-003 (systemd stop SIGKILL); P-14 not re-run.
+
 ### Proof layers (read carefully)
 
 | Layer | What it proves | What it does not prove |
