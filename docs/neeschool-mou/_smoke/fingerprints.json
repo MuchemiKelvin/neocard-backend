@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 79,
+      "enrollment_id": "enroll_kelvin_slot1_20260812",
+      "user_id": "user_1784053930781_e82767e8",
+      "device_id": "device_1783962666378_8d478192",
+      "fingerprint_slot": 1,
+      "status": "ACTIVE",
+      "enrolled_at": "2026-08-12 17:51:27",
+      "updated_at": "2026-08-19 18:23:26",
+      "last_verified_at": "2026-08-19 18:23:26",
+      "verification_count": 15,
+      "created_by": "raspberry-pi",
+      "notes": null
+    },
+    {
+      "id": 78,
+      "enrollment_id": "ENR_CHECKIN_1786229209509_2",
+      "user_id": "fp_test_user_1786229209500",
+      "device_id": "fp_test_device_1786229209503",
+      "fingerprint_slot": 2,
+      "status": "ACTIVE",
+      "enrolled_at": "2026-08-08 22:46:49",
+      "updated_at": "2026-08-08 22:46:49",
+      "last_verified_at": null,
+      "verification_count": 0,
+      "created_by": null,
+      "notes": null
+    }
+  ]
+}

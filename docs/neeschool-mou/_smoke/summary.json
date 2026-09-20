@@ -1,0 +1,22 @@
+{
+  "V-01": {
+    "http": 200,
+    "users": 6,
+    "active": 6,
+    "pass": true
+  },
+  "V-02": {
+    "http": 200,
+    "devices": 2,
+    "pass": true
+  },
+  "enrollments": {
+    "http": 200,
+    "count": 2
+  },
+  "V-03": {
+    "http": 200,
+    "txns": 0,
+    "pass": true
+  }
+}
