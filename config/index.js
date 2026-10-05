@@ -58,6 +58,12 @@ const config = {
     dailyScanLimit: parseInt(process.env.DAILY_SCAN_LIMIT) || 100
   },
 
+  // Device Security Module V1 (reader/device, keyed by hardware_devices.device_id)
+  deviceSecurity: {
+    offlineLimitHours: parseInt(process.env.DEVICE_OFFLINE_LIMIT_HOURS, 10) || 24,
+    unlockTtlMinutes: parseInt(process.env.DEVICE_UNLOCK_TTL_MINUTES, 10) || 30
+  },
+
   // CORS configuration
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',

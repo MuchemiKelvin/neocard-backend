@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const database = require('../database');
 const { FingerprintValidationError } = require('./fingerprintValidation');
+const { assertScanAllowed } = require('./antiFraud');
+const deviceSecurity = require('./deviceSecurity');
 
 const TRANSACTION_TYPES = Object.freeze([
   'CHECK_IN',
@@ -156,6 +158,13 @@ class NeoCardTransactionService {
       }
     }
 
+    const cardUid = payload.uid || payload.neocard_uid || payload.neocardUid || null;
+    if (cardUid) {
+      await assertScanAllowed(cardUid);
+    }
+
+    await deviceSecurity.assertRiskBearingAllowed(device_id);
+
     let user_id = user_id_hint;
     let first_name = null;
     let last_name = null;
@@ -212,6 +221,9 @@ class NeoCardTransactionService {
       user_id = enrollment.user_id;
       first_name = enrollment.first_name;
       last_name = enrollment.last_name;
+      if (!cardUid && enrollment.neocard_uid) {
+        await assertScanAllowed(enrollment.neocard_uid);
+      }
     }
 
     if (!user_id) {
@@ -232,6 +244,9 @@ class NeoCardTransactionService {
       }
       first_name = user.first_name;
       last_name = user.last_name;
+      if (!cardUid && user.neocard_uid) {
+        await assertScanAllowed(user.neocard_uid);
+      }
     }
 
     const transaction_id = clientTransactionId || this.generateTransactionId();

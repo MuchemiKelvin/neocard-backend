@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const database = require('../database');
 const { FingerprintValidationError } = require('./fingerprintValidation');
+const deviceSecurity = require('./deviceSecurity');
 
 /**
  * Stage 3 fingerprint verification business logic.
@@ -75,6 +76,8 @@ class FingerprintVerificationService {
       );
     }
 
+    await deviceSecurity.assertRiskBearingAllowed(device_id);
+
     if (authenticatedDevice.status !== 'active') {
       await this.logAttempt({
         device_id,
@@ -136,6 +139,8 @@ class FingerprintVerificationService {
       confidence: confidence ?? null,
       result: 'SUCCESS'
     });
+
+    await deviceSecurity.recordVerification(device_id);
 
     return {
       verification_id,

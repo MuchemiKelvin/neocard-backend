@@ -1,8 +1,8 @@
 // Middleware for Neo Card™ Demo Backend
 
 const jwt = require('jsonwebtoken');
-const config = require('../config');
 const db = require('../database');
+const { assertScanAllowed } = require('../services/antiFraud');
 
 /**
  * Device API key authentication middleware
@@ -126,44 +126,19 @@ const validateScanRequest = (req, res, next) => {
  * Checks cooldown and daily limits
  */
 const antiFraudCheck = async (req, res, next) => {
-  const { uid } = req.body;
-  
   try {
-    const { antifraud } = config;
-    
-    // Get last scan time for this UID
-    const lastScanTime = await db.getLastScanTime(uid);
-    
-    // Check cooldown
-    if (lastScanTime) {
-      const { isWithinCooldown } = require('../utils');
-      if (isWithinCooldown(lastScanTime, antifraud.cooldownMinutes)) {
-        return res.status(429).json({
-          status: 'error',
-          message: 'Scan blocked: within cooldown period',
-          code: 'COOLDOWN_ACTIVE',
-          cooldownMinutes: antifraud.cooldownMinutes,
-          lastScanTime
-        });
-      }
-    }
-    
-    // Check daily limit
-    const today = new Date().toISOString().split('T')[0];
-    const dailyScanCount = await db.getDailyScanCount(uid, today);
-    
-    if (dailyScanCount >= antifraud.dailyScanLimit) {
-      return res.status(429).json({
-        status: 'error',
-        message: 'Daily scan limit exceeded',
-        code: 'DAILY_LIMIT_EXCEEDED',
-        dailyLimit: antifraud.dailyScanLimit,
-        currentCount: dailyScanCount
-      });
-    }
-    
+    await assertScanAllowed(req.body.uid);
     next();
   } catch (error) {
+    if (error.status === 429) {
+      return res.status(429).json({
+        status: 'error',
+        message: error.message,
+        code: error.code,
+        ...error.details
+      });
+    }
+
     console.error('Anti-fraud check error:', error);
     next(error);
   }

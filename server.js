@@ -67,6 +67,9 @@ app.use('/v1/fingerprints', require('./routes/fingerprints'));
 // NeoCard terminal transactions (device API key)
 app.use('/v1/neocard', require('./routes/neocard'));
 
+// Device Security Module V1 (any hardware device_id; NeoCard is the first caller)
+app.use('/v1/device-security', require('./routes/deviceSecurity'));
+
 // NeoCare Dashboard routes
 app.use('/neocare', require('./routes/neocare'));
 

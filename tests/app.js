@@ -54,6 +54,7 @@ app.use('/v1/hardware', require('../routes/hardware'));
 app.use('/v1/device', require('../routes/device'));
 app.use('/v1/fingerprints', require('../routes/fingerprints'));
 app.use('/v1/neocard', require('../routes/neocard'));
+app.use('/v1/device-security', require('../routes/deviceSecurity'));
 
 // 404 handler
 app.use('*', (req, res) => {

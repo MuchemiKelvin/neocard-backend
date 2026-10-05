@@ -501,6 +501,30 @@ class Database {
       CREATE INDEX IF NOT EXISTS idx_neocard_transactions_occurred ON neocard_transactions(occurred_at)
     `);
 
+    // Device Security Module V1 — checkpoint and restriction live on the existing device row.
+    await this.addColumnIfMissing('hardware_devices', 'last_valid_at', 'TEXT');
+    await this.addColumnIfMissing('hardware_devices', 'security_status', "TEXT DEFAULT 'ACTIVE'");
+    await this.addColumnIfMissing('hardware_devices', 'restriction_reason', 'TEXT');
+    await this.addColumnIfMissing('hardware_devices', 'restricted_at', 'TEXT');
+
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS device_unlock_tokens (
+        token_id TEXT PRIMARY KEY,
+        device_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'ISSUED',
+        authorized_by TEXT NOT NULL,
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        FOREIGN KEY (device_id) REFERENCES hardware_devices(device_id)
+      )
+    `);
+    await this.execSql(`
+      CREATE INDEX IF NOT EXISTS idx_device_unlock_tokens_device
+      ON device_unlock_tokens(device_id)
+    `);
+
     await this.backfillDeviceApiKeys();
     console.log('Database migrations applied');
   }
@@ -542,6 +566,15 @@ class Database {
       this.db.run(sql, params, function(err) {
         if (err) reject(err);
         else resolve({ changes: this.changes, lastID: this.lastID });
+      });
+    });
+  }
+
+  getSql(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
       });
     });
   }
@@ -1661,6 +1694,7 @@ class Database {
         u.first_name,
         u.last_name,
         u.email,
+        u.neocard_uid,
         u.active AS user_active
       FROM fingerprint_enrollments fe
       JOIN users u ON u.user_id = fe.user_id
@@ -2389,6 +2423,113 @@ class Database {
         }
       });
     });
+  }
+
+  // ==================== DEVICE SECURITY MODULE ====================
+
+  async markDeviceRestricted(deviceId, reason, restrictedAt) {
+    return this.runSql(
+      `UPDATE hardware_devices
+       SET security_status = 'RESTRICTED',
+           restriction_reason = ?,
+           restricted_at = ?,
+           updated_at = ?
+       WHERE device_id = ?
+         AND IFNULL(security_status, 'ACTIVE') != 'RESTRICTED'`,
+      [reason, restrictedAt, restrictedAt, deviceId]
+    );
+  }
+
+  async recordDeviceCheckpoint(deviceId, at) {
+    return this.runSql(
+      `UPDATE hardware_devices
+       SET last_valid_at = ?,
+           security_status = 'ACTIVE',
+           restriction_reason = NULL,
+           restricted_at = NULL,
+           updated_at = ?
+       WHERE device_id = ?
+         AND IFNULL(security_status, 'ACTIVE') != 'RESTRICTED'`,
+      [at, at, deviceId]
+    );
+  }
+
+  async unlockDeviceSecurity(deviceId, at) {
+    return this.runSql(
+      `UPDATE hardware_devices
+       SET last_valid_at = ?,
+           security_status = 'ACTIVE',
+           restriction_reason = NULL,
+           restricted_at = NULL,
+           updated_at = ?
+       WHERE device_id = ?`,
+      [at, at, deviceId]
+    );
+  }
+
+  async supersedeDeviceUnlockTokens(deviceId) {
+    return this.runSql(
+      `UPDATE device_unlock_tokens
+       SET status = 'SUPERSEDED'
+       WHERE device_id = ? AND status = 'ISSUED'`,
+      [deviceId]
+    );
+  }
+
+  async createDeviceUnlockToken(token) {
+    return this.runSql(
+      `INSERT INTO device_unlock_tokens (
+         token_id, device_id, token_hash, status, authorized_by, issued_at, expires_at
+       ) VALUES (?, ?, ?, 'ISSUED', ?, ?, ?)`,
+      [
+        token.token_id,
+        token.device_id,
+        token.token_hash,
+        token.authorized_by,
+        token.issued_at,
+        token.expires_at
+      ]
+    );
+  }
+
+  async getDeviceUnlockTokenByHash(tokenHash) {
+    return this.getSql(
+      'SELECT * FROM device_unlock_tokens WHERE token_hash = ?',
+      [tokenHash]
+    );
+  }
+
+  async markDeviceUnlockTokenUsed(tokenId, usedAt) {
+    return this.runSql(
+      `UPDATE device_unlock_tokens
+       SET status = 'USED', used_at = ?
+       WHERE token_id = ? AND status = 'ISSUED'`,
+      [usedAt, tokenId]
+    );
+  }
+
+  async markDeviceUnlockTokenExpired(tokenId) {
+    return this.runSql(
+      `UPDATE device_unlock_tokens
+       SET status = 'EXPIRED'
+       WHERE token_id = ? AND status = 'ISSUED'`,
+      [tokenId]
+    );
+  }
+
+  async getDeviceSecurityEvents(deviceId) {
+    const rows = await this.allSql(
+      `SELECT * FROM neocare_proof_events
+       WHERE user_uid = ? AND action LIKE 'device_security.%'
+       ORDER BY created_at ASC`,
+      [deviceId]
+    );
+
+    return rows.map((row) => ({
+      ...row,
+      input_json: JSON.parse(row.input_json),
+      output_json: JSON.parse(row.output_json)
+    }));
   }
 
   async close() {

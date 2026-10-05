@@ -5,6 +5,7 @@ const database = require("../database");
 const { authenticateDeviceApiKey } = require("../middleware");
 const FingerprintValidation = require("../services/fingerprintValidation");
 const FingerprintVerification = require("../services/fingerprintVerification");
+const deviceSecurity = require("../services/deviceSecurity");
 
 router.post("/enroll", authenticateDeviceApiKey, async (req, res) => {
   try {
@@ -16,6 +17,8 @@ router.post("/enroll", authenticateDeviceApiKey, async (req, res) => {
       created_by,
       notes
     } = req.body;
+
+    await deviceSecurity.assertRiskBearingAllowed(req.device.device_id);
 
     await FingerprintValidation.validateEnrollment(
       {
