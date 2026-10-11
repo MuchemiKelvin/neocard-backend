@@ -1,0 +1,196 @@
+:root {
+  --background: hsl(0 0% 0%);
+  --foreground: hsl(45 100% 85%);
+  --card: hsl(0 0% 3%);
+  --primary: hsl(43 100% 52%);
+  --primary-deep: hsl(43 100% 35%);
+  --primary-glow: hsl(43 100% 65%);
+  --muted: hsl(45 30% 55%);
+  --accent: hsl(187 100% 42%);
+  --success: hsl(142 76% 36%);
+  --warning: hsl(38 92% 50%);
+  --border: hsl(43 50% 25%);
+  font-family: "Segoe UI", sans-serif;
+  color: var(--foreground);
+  background:
+    radial-gradient(circle at top right, hsl(43 100% 52% / 0.18), transparent 32%),
+    radial-gradient(circle at bottom left, hsl(187 100% 42% / 0.12), transparent 28%),
+    var(--background);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 24px;
+  color: var(--foreground);
+  background:
+    radial-gradient(circle at top right, hsl(43 100% 52% / 0.18), transparent 32%),
+    radial-gradient(circle at bottom left, hsl(187 100% 42% / 0.12), transparent 28%),
+    var(--background);
+}
+
+.top, .load-form, .school, .grid {
+  display: flex;
+  gap: 16px;
+}
+
+.top {
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.brand {
+  margin: 0;
+  color: var(--primary);
+  font-weight: 700;
+  text-shadow: 0 0 12px hsl(43 100% 52% / 0.55);
+}
+
+h1, h2, h3 {
+  margin: 0;
+  color: var(--primary);
+}
+
+.load-form {
+  align-items: end;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+input, button {
+  font: inherit;
+}
+
+input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: hsl(0 0% 8%);
+  color: var(--foreground);
+}
+
+button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--primary-deep), var(--primary));
+  color: black;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 18px hsl(43 100% 52% / 0.35);
+}
+
+button:hover {
+  background: linear-gradient(135deg, var(--primary), var(--primary-glow));
+}
+
+.card {
+  background: linear-gradient(145deg, hsl(43 100% 52% / 0.08), var(--card) 42%);
+  border: 1px solid hsl(43 100% 52% / 0.35);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 0 16px hsl(43 100% 52% / 0.12);
+}
+
+.school {
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.grid {
+  margin-bottom: 16px;
+}
+
+.grid .card {
+  flex: 1;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.figure {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 8px 0;
+  color: var(--foreground);
+}
+
+.badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: hsl(142 76% 36% / 0.2);
+  color: hsl(142 76% 62%);
+}
+
+.badge.warn {
+  background: hsl(38 92% 50% / 0.2);
+  color: var(--warning);
+}
+
+dl {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+}
+
+dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.bar {
+  height: 8px;
+  background: hsl(0 0% 12%);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--primary));
+}
+
+ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+th, td {
+  text-align: left;
+  padding: 8px 4px;
+  border-bottom: 1px solid hsl(43 50% 18%);
+  font-size: 14px;
+}
+
+th {
+  color: var(--primary);
+}
+
+.message {
+  padding: 12px;
+  background: linear-gradient(135deg, hsl(38 92% 50% / 0.2), hsl(0 0% 6%));
+  border: 1px solid hsl(38 92% 50% / 0.45);
+  border-radius: 8px;
+  color: var(--foreground);
+}

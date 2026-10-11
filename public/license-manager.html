@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>License Manager</title>
+  <link rel="stylesheet" href="/license-manager/license-manager.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="brand">NeoCampus</p>
+      <h1>License Manager</h1>
+    </div>
+    <form id="load-form" class="load-form">
+      <label>School ID <input id="tenant-id" name="tenant" value="SCHOOL-GREENFIELD" required></label>
+      <button type="submit">Load license</button>
+    </form>
+  </header>
+  <p id="message" class="message" hidden></p>
+  <main id="manager" hidden>
+    <section class="school card">
+      <div>
+        <h2 id="school-name">School</h2>
+        <p id="school-id" class="muted"></p>
+      </div>
+      <span id="status" class="badge"></span>
+      <dl>
+        <div><dt>Valid until</dt><dd id="expires"></dd></div>
+        <div><dt>Renewed</dt><dd id="renewed"></dd></div>
+      </dl>
+      <button id="renew" type="button">Renew one year</button>
+    </section>
+    <section class="grid">
+      <article class="card">
+        <h3>Seats</h3>
+        <p class="figure" id="seats"></p>
+        <div class="bar"><span id="seat-bar"></span></div>
+      </article>
+      <article class="card">
+        <h3>Storage</h3>
+        <p class="figure" id="storage"></p>
+        <p class="muted" id="per-student"></p>
+        <div class="bar"><span id="storage-bar"></span></div>
+      </article>
+    </section>
+    <section class="grid">
+      <article class="card">
+        <h3>Products</h3>
+        <ul id="products"></ul>
+      </article>
+      <article class="card">
+        <h3>Devices</h3>
+        <ul id="devices"></ul>
+      </article>
+    </section>
+    <section class="card">
+      <h3>Activity</h3>
+      <table>
+        <thead>
+          <tr><th>When</th><th>Action</th><th>Decision</th><th>Code</th></tr>
+        </thead>
+        <tbody id="activity"></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="/license-manager/license-manager.js"></script>
+</body>
+</html>

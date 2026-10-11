@@ -95,9 +95,29 @@ class LicenseServer {
       storage_used_gb: license.storage_used_gb,
       expires_at: license.expires_at,
       renewed_at: license.renewed_at,
+      storage_per_student_gb: license.seat_limit > 0 && license.storage_quota_gb != null
+        ? Math.round((license.storage_quota_gb / license.seat_limit) * 100) / 100
+        : null,
       products: entitlements.map((row) => row.product),
       devices: devices.map((row) => row.device_id)
     };
+  }
+
+  async listActivity(tenantId) {
+    await this.getLicenseView(tenantId);
+    const events = await database.getProofEvents({ user_uid: tenantId, limit: 50 });
+    return events
+      .filter((event) => String(event.action || '').startsWith('license.'))
+      .map((event) => ({
+        id: event.id,
+        action: event.action,
+        at: event.output_json?.timestamp || event.created_at,
+        decision: event.output_json?.decision || event.input_json?.decision || null,
+        code: event.output_json?.code || event.input_json?.code || null,
+        product: event.input_json?.product || null,
+        device_id: event.input_json?.device_id || null,
+        user_id: event.input_json?.user_id || null
+      }));
   }
 
   async saveLicense(input) {

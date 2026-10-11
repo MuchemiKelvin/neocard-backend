@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -71,7 +72,40 @@ app.use('/v1/neocard', require('./routes/neocard'));
 app.use('/v1/device-security', require('./routes/deviceSecurity'));
 
 // Central License Server V1
+const licenseServer = require('./services/licenseServer');
 app.use('/v1/license', require('./routes/license'));
+
+app.get('/license-manager/data', async (req, res) => {
+  try {
+    const tenantId = String(req.query.tenant || 'SCHOOL-GREENFIELD').trim();
+    const data = await licenseServer.getLicenseView(tenantId);
+    const activity = await licenseServer.listActivity(tenantId);
+    return res.json({ success: true, data, activity });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/license-manager/renew', async (req, res) => {
+  try {
+    const tenantId = String(req.body.tenant_id || 'SCHOOL-GREENFIELD').trim();
+    const current = await licenseServer.getLicenseView(tenantId);
+    const currentExpiry = new Date(current.expires_at || Date.now());
+    const start = currentExpiry.getTime() > Date.now() ? currentExpiry : new Date();
+    const nextExpiry = new Date(start);
+    nextExpiry.setUTCFullYear(nextExpiry.getUTCFullYear() + 1);
+    const data = await licenseServer.setStatus(tenantId, 'ACTIVE', nextExpiry.toISOString());
+    const activity = await licenseServer.listActivity(tenantId);
+    return res.json({ success: true, data, activity });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/license-manager', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'license-manager.html'));
+});
+app.use('/license-manager', express.static(path.join(__dirname, 'public')));
 
 // NeoCare Dashboard routes
 app.use('/neocare', require('./routes/neocare'));

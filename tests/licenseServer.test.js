@@ -86,6 +86,7 @@ describe('Central License Server V1', () => {
     expect(same.body.data.license_status).toBe('ACTIVE');
     expect(same.body.data.products).toEqual(expect.arrayContaining(['NEOSCHOOL', 'NEOCARD']));
     expect(same.body.data.devices).toEqual([deviceId]);
+    expect(same.body.data.storage_per_student_gb).toBe(20);
   });
 
   test('expired and suspended licenses are denied', async () => {
@@ -264,5 +265,12 @@ describe('Central License Server V1', () => {
     const events = await db.getProofEvents({ user_uid: license.tenant_id });
     expect(events.some((event) => event.action === 'license.validate')).toBe(true);
     expect(events.some((event) => event.action === 'license.admin_update')).toBe(true);
+
+    const activity = await request(app)
+      .get(`/v1/license/${license.tenant_id}/activity`)
+      .set('x-api-key', ADMIN_KEY);
+    expect(activity.status).toBe(200);
+    expect(activity.body.activity.some((event) => event.action === 'license.validate')).toBe(true);
+    expect(activity.body.activity.some((event) => event.action === 'license.admin_update')).toBe(true);
   });
 });

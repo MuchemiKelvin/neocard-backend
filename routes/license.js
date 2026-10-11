@@ -92,6 +92,16 @@ router.post('/device/validate', authenticateLicenseCaller, async (req, res) => {
   }
 });
 
+router.get('/:tenantId/activity', authenticateLicenseCaller, async (req, res) => {
+  try {
+    await licenseServer.assertTenantAccess(req.params.tenantId, req.licenseAuth);
+    const activity = await licenseServer.listActivity(req.params.tenantId);
+    return res.json({ success: true, tenant_id: req.params.tenantId, activity });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
 router.get('/:tenantId', authenticateLicenseCaller, async (req, res) => {
   try {
     await licenseServer.assertTenantAccess(req.params.tenantId, req.licenseAuth);
