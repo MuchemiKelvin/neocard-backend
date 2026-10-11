@@ -70,6 +70,9 @@ app.use('/v1/neocard', require('./routes/neocard'));
 // Device Security Module V1 (any hardware device_id; NeoCard is the first caller)
 app.use('/v1/device-security', require('./routes/deviceSecurity'));
 
+// Central License Server V1
+app.use('/v1/license', require('./routes/license'));
+
 // NeoCare Dashboard routes
 app.use('/neocare', require('./routes/neocare'));
 

@@ -525,6 +525,45 @@ class Database {
       ON device_unlock_tokens(device_id)
     `);
 
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS campus_licenses (
+        tenant_id TEXT PRIMARY KEY,
+        school_name TEXT,
+        license_status TEXT NOT NULL DEFAULT 'ACTIVE',
+        seat_limit INTEGER NOT NULL,
+        storage_quota_gb INTEGER,
+        storage_used_gb INTEGER NOT NULL DEFAULT 0,
+        expires_at TEXT,
+        renewed_at TEXT,
+        suspended_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS campus_license_entitlements (
+        tenant_id TEXT NOT NULL,
+        product TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (tenant_id, product)
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS campus_license_seats (
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        activated_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, user_id)
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS campus_license_devices (
+        tenant_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, device_id)
+      )
+    `);
+
     await this.backfillDeviceApiKeys();
     console.log('Database migrations applied');
   }
@@ -2530,6 +2569,115 @@ class Database {
       input_json: JSON.parse(row.input_json),
       output_json: JSON.parse(row.output_json)
     }));
+  }
+
+  async saveCampusLicense(license) {
+    await this.runSql(
+      `INSERT INTO campus_licenses (
+         tenant_id, school_name, license_status, seat_limit, storage_quota_gb,
+         storage_used_gb, expires_at, renewed_at, suspended_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id) DO UPDATE SET
+         school_name = excluded.school_name,
+         license_status = excluded.license_status,
+         seat_limit = excluded.seat_limit,
+         storage_quota_gb = excluded.storage_quota_gb,
+         storage_used_gb = excluded.storage_used_gb,
+         expires_at = excluded.expires_at,
+         renewed_at = excluded.renewed_at,
+         suspended_at = excluded.suspended_at,
+         updated_at = excluded.updated_at`,
+      [
+        license.tenant_id,
+        license.school_name || null,
+        license.license_status,
+        license.seat_limit,
+        license.storage_quota_gb ?? null,
+        license.storage_used_gb || 0,
+        license.expires_at || null,
+        license.renewed_at || null,
+        license.suspended_at || null,
+        license.created_at,
+        license.updated_at
+      ]
+    );
+  }
+
+  async getCampusLicense(tenantId) {
+    return this.getSql('SELECT * FROM campus_licenses WHERE tenant_id = ?', [tenantId]);
+  }
+
+  async setCampusLicenseStatus(tenantId, status, fields) {
+    return this.runSql(
+      `UPDATE campus_licenses
+       SET license_status = ?, expires_at = ?, renewed_at = ?, suspended_at = ?, updated_at = ?
+       WHERE tenant_id = ?`,
+      [status, fields.expires_at, fields.renewed_at, fields.suspended_at, fields.updated_at, tenantId]
+    );
+  }
+
+  async replaceCampusEntitlements(tenantId, products) {
+    await this.runSql('DELETE FROM campus_license_entitlements WHERE tenant_id = ?', [tenantId]);
+    for (const product of products) {
+      await this.runSql(
+        'INSERT INTO campus_license_entitlements (tenant_id, product, enabled) VALUES (?, ?, 1)',
+        [tenantId, product]
+      );
+    }
+  }
+
+  async listCampusEntitlements(tenantId) {
+    return this.allSql(
+      'SELECT product FROM campus_license_entitlements WHERE tenant_id = ? AND enabled = 1 ORDER BY product',
+      [tenantId]
+    );
+  }
+
+  async countCampusSeats(tenantId) {
+    const row = await this.getSql(
+      'SELECT COUNT(*) AS total FROM campus_license_seats WHERE tenant_id = ?',
+      [tenantId]
+    );
+    return row ? row.total : 0;
+  }
+
+  async getCampusSeat(tenantId, userId) {
+    return this.getSql(
+      'SELECT * FROM campus_license_seats WHERE tenant_id = ? AND user_id = ?',
+      [tenantId, userId]
+    );
+  }
+
+  async insertCampusSeat(tenantId, userId, activatedAt) {
+    return this.runSql(
+      'INSERT INTO campus_license_seats (tenant_id, user_id, activated_at) VALUES (?, ?, ?)',
+      [tenantId, userId, activatedAt]
+    );
+  }
+
+  async replaceCampusDevices(tenantId, deviceIds) {
+    await this.runSql('DELETE FROM campus_license_devices WHERE tenant_id = ?', [tenantId]);
+    for (const deviceId of deviceIds) {
+      await this.runSql(
+        'INSERT INTO campus_license_devices (tenant_id, device_id) VALUES (?, ?)',
+        [tenantId, deviceId]
+      );
+    }
+  }
+
+  async campusDeviceBelongsToTenant(tenantId, deviceId) {
+    const row = await this.getSql(
+      'SELECT device_id FROM campus_license_devices WHERE tenant_id = ? AND device_id = ?',
+      [tenantId, deviceId]
+    );
+    return Boolean(row);
+  }
+
+  async listCampusDevices(tenantId) {
+    return this.allSql(
+      'SELECT device_id FROM campus_license_devices WHERE tenant_id = ? ORDER BY device_id',
+      [tenantId]
+    );
   }
 
   async close() {
