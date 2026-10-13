@@ -71,6 +71,13 @@ app.use('/v1/neocard', require('./routes/neocard'));
 // Device Security Module V1 (any hardware device_id; NeoCard is the first caller)
 app.use('/v1/device-security', require('./routes/deviceSecurity'));
 
+app.use('/v1', require('./routes/backup'));
+app.use('/v1/ai', require('./routes/ultraAi'));
+app.use('/v1/app-builder', require('./routes/appBuilder'));
+
+// Sponsor Analytics and Analytics V1 share one event record
+app.use('/v1/analytics', require('./routes/analytics'));
+
 // Central License Server V1
 const licenseServer = require('./services/licenseServer');
 app.use('/v1/license', require('./routes/license'));
@@ -101,6 +108,41 @@ app.post('/license-manager/renew', async (req, res) => {
     return res.status(error.status || 500).json({ success: false, message: error.message });
   }
 });
+
+const appBuilder = require('./services/appBuilder');
+const localAdmin = { admin: true, deviceId: null };
+
+app.post('/app-builder/draft', async (req, res) => {
+  try {
+    const data = await appBuilder.createLesson(req.body || {}, localAdmin);
+    return res.status(201).json({ success: true, data });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/app-builder/lessons/:lessonId/save', async (req, res) => {
+  try {
+    const data = await appBuilder.setStatus(req.params.lessonId, 'SAVED', localAdmin);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/app-builder/lessons/:lessonId/publish', async (req, res) => {
+  try {
+    const data = await appBuilder.setStatus(req.params.lessonId, 'PUBLISHED', localAdmin);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/app-builder', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app-builder.html'));
+});
+app.use('/app-builder', express.static(path.join(__dirname, 'public')));
 
 app.get('/license-manager', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'license-manager.html'));

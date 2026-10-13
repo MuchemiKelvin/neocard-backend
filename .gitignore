@@ -21,6 +21,8 @@ database/*.db
 database/*.sqlite
 database/*.sqlite3
 database/backups/
+database/restores/
+database/student-files/
 database/**/*.db
 database/**/*.sqlite
 database/**/*.sqlite3

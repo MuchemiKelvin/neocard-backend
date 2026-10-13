@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>App Builder</title>
+  <link rel="stylesheet" href="/license-manager/license-manager.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="brand">NeoCampus</p>
+      <h1>App Builder</h1>
+    </div>
+  </header>
+  <form id="lesson-form" class="card load-form">
+    <label>School ID <input id="tenant-id" value="SCHOOL-GREENFIELD" required></label>
+    <label>User <input id="user-id" value="teacher-1" required></label>
+    <label>Role <input id="role" value="teacher" required></label>
+    <label>Grade <input id="grade" value="2" required></label>
+    <label>Subject <input id="subject" value="Mathematics" required></label>
+    <label>Topic <input id="topic" value="Addition" required></label>
+    <button type="submit">Create draft</button>
+  </form>
+  <p id="message" class="message" hidden></p>
+  <main id="lesson" class="card" hidden>
+    <h2 id="lesson-title"></h2>
+    <p id="lesson-status" class="muted"></p>
+    <ol id="lesson-steps"></ol>
+    <div class="load-form">
+      <button id="save" type="button">Save</button>
+      <button id="publish" type="button">Publish</button>
+    </div>
+  </main>
+  <script src="/app-builder/app-builder.js"></script>
+</body>
+</html>

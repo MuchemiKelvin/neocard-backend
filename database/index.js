@@ -563,6 +563,84 @@ class Database {
         PRIMARY KEY (tenant_id, device_id)
       )
     `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS analytics_events (
+        event_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT,
+        school_id TEXT,
+        module TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        campaign_id TEXT,
+        content_id TEXT,
+        session_id TEXT,
+        device_id TEXT,
+        metadata_json TEXT,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS campus_backups (
+        backup_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        backup_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        size_bytes INTEGER,
+        version INTEGER NOT NULL,
+        repository_ref TEXT,
+        checksum TEXT,
+        created_at TEXT NOT NULL,
+        error TEXT
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS student_storage (
+        tenant_id TEXT NOT NULL,
+        student_id TEXT NOT NULL,
+        quota_bytes INTEGER NOT NULL,
+        used_bytes INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (tenant_id, student_id)
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS student_files (
+        file_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        student_id TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        repository_ref TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS ai_usage_logs (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        module TEXT NOT NULL,
+        use_case TEXT NOT NULL,
+        provider_status TEXT NOT NULL,
+        result TEXT,
+        cost REAL,
+        error TEXT,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS app_lessons (
+        lesson_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        status TEXT NOT NULL,
+        lesson_json TEXT NOT NULL,
+        source TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
 
     await this.backfillDeviceApiKeys();
     console.log('Database migrations applied');
@@ -838,6 +916,183 @@ class Database {
     }
 
     return results;
+  }
+
+  async countVerifiedScans() {
+    const row = await this.getSql('SELECT COUNT(*) AS total FROM scans WHERE verified = 1');
+    return row ? row.total : 0;
+  }
+
+  async countRepeatEngagement() {
+    const row = await this.getSql(
+      `SELECT COUNT(*) AS total FROM (
+         SELECT uid, campaign_id FROM scans
+         WHERE verified = 1
+         GROUP BY uid, campaign_id
+         HAVING COUNT(*) > 1
+       )`
+    );
+    return row ? row.total : 0;
+  }
+
+  async insertAnalyticsEvent(event) {
+    const result = await this.runSql(
+      `INSERT OR IGNORE INTO analytics_events (
+         event_id, tenant_id, user_id, school_id, module, event_type,
+         campaign_id, content_id, session_id, device_id, metadata_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        event.event_id,
+        event.tenant_id,
+        event.user_id || null,
+        event.school_id || null,
+        event.module,
+        event.event_type,
+        event.campaign_id || null,
+        event.content_id || null,
+        event.session_id || null,
+        event.device_id || null,
+        event.metadata_json || null,
+        event.created_at
+      ]
+    );
+    return result.changes > 0;
+  }
+
+  async insertCampusBackup(backup) {
+    await this.runSql(
+      `INSERT INTO campus_backups (
+         backup_id, tenant_id, backup_type, status, size_bytes, version,
+         repository_ref, checksum, created_at, error
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        backup.backup_id, backup.tenant_id, backup.backup_type, backup.status,
+        backup.size_bytes, backup.version, backup.repository_ref, backup.checksum,
+        backup.created_at, backup.error || null
+      ]
+    );
+  }
+
+  async listCampusBackups(tenantId) {
+    return this.allSql(
+      'SELECT * FROM campus_backups WHERE tenant_id = ? ORDER BY created_at DESC',
+      [tenantId]
+    );
+  }
+
+  async getCampusBackup(backupId) {
+    return this.getSql('SELECT * FROM campus_backups WHERE backup_id = ?', [backupId]);
+  }
+
+  async nextBackupVersion(tenantId) {
+    const row = await this.getSql(
+      'SELECT COALESCE(MAX(version), 0) AS version FROM campus_backups WHERE tenant_id = ?',
+      [tenantId]
+    );
+    return (row ? row.version : 0) + 1;
+  }
+
+  async getStudentStorage(tenantId, studentId) {
+    return this.getSql(
+      'SELECT * FROM student_storage WHERE tenant_id = ? AND student_id = ?',
+      [tenantId, studentId]
+    );
+  }
+
+  async ensureStudentStorage(tenantId, studentId, quotaBytes) {
+    await this.runSql(
+      `INSERT OR IGNORE INTO student_storage (tenant_id, student_id, quota_bytes, used_bytes)
+       VALUES (?, ?, ?, 0)`,
+      [tenantId, studentId, quotaBytes]
+    );
+    return this.getStudentStorage(tenantId, studentId);
+  }
+
+  async insertStudentFile(file) {
+    await this.runSql(
+      `INSERT INTO student_files (
+         file_id, tenant_id, student_id, filename, size_bytes, repository_ref, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [file.file_id, file.tenant_id, file.student_id, file.filename, file.size_bytes, file.repository_ref, file.created_at]
+    );
+  }
+
+  async listStudentFiles(tenantId) {
+    return this.allSql(
+      'SELECT file_id, student_id, filename, size_bytes, created_at FROM student_files WHERE tenant_id = ? ORDER BY created_at DESC',
+      [tenantId]
+    );
+  }
+
+  async listAnalyticsEvents() {
+    return this.allSql(
+      'SELECT event_id, tenant_id, user_id, event_type, metadata_json, created_at FROM analytics_events'
+    );
+  }
+
+  async setStudentUsage(tenantId, studentId, usedBytes) {
+    await this.runSql(
+      'UPDATE student_storage SET used_bytes = ? WHERE tenant_id = ? AND student_id = ?',
+      [usedBytes, tenantId, studentId]
+    );
+  }
+
+  async insertAiUsageLog(entry) {
+    await this.runSql(
+      `INSERT INTO ai_usage_logs (
+         id, tenant_id, user_id, role, module, use_case, provider_status,
+         result, cost, error, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entry.id, entry.tenant_id, entry.user_id, entry.role, entry.module,
+        entry.use_case, entry.provider_status, entry.result || null,
+        entry.cost ?? null, entry.error || null, entry.created_at
+      ]
+    );
+  }
+
+  async listAiUsageLogs(tenantId) {
+    return this.allSql(
+      'SELECT * FROM ai_usage_logs WHERE tenant_id = ? ORDER BY created_at DESC',
+      [tenantId]
+    );
+  }
+
+  async insertAppLesson(lesson) {
+    await this.runSql(
+      `INSERT INTO app_lessons (
+         lesson_id, tenant_id, user_id, role, status, lesson_json, source, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        lesson.lesson_id, lesson.tenant_id, lesson.user_id, lesson.role,
+        lesson.status, lesson.lesson_json, lesson.source, lesson.created_at, lesson.updated_at
+      ]
+    );
+  }
+
+  async getAppLesson(lessonId) {
+    return this.getSql('SELECT * FROM app_lessons WHERE lesson_id = ?', [lessonId]);
+  }
+
+  async setAppLessonStatus(lessonId, status, updatedAt) {
+    await this.runSql(
+      'UPDATE app_lessons SET status = ?, updated_at = ? WHERE lesson_id = ?',
+      [status, updatedAt, lessonId]
+    );
+  }
+
+  async summarizeAnalyticsEvents(tenantId, from, to) {
+    let sql = 'SELECT * FROM analytics_events WHERE tenant_id = ?';
+    const params = [tenantId];
+    if (from) {
+      sql += ' AND created_at >= ?';
+      params.push(from);
+    }
+    if (to) {
+      sql += ' AND created_at <= ?';
+      params.push(to);
+    }
+    return this.allSql(sql, params);
   }
 
   // AI-related database methods
@@ -2676,6 +2931,31 @@ class Database {
   async listCampusDevices(tenantId) {
     return this.allSql(
       'SELECT device_id FROM campus_license_devices WHERE tenant_id = ? ORDER BY device_id',
+      [tenantId]
+    );
+  }
+
+  async listCampusDeviceDetails(tenantId) {
+    return this.allSql(
+      `SELECT d.device_id, h.device_name, h.device_type, h.security_status, h.last_valid_at
+       FROM campus_license_devices d
+       LEFT JOIN hardware_devices h ON h.device_id = d.device_id
+       WHERE d.tenant_id = ?
+       ORDER BY d.device_id`,
+      [tenantId]
+    );
+  }
+
+  async listCampusSeats(tenantId) {
+    return this.allSql(
+      `SELECT s.user_id, s.activated_at,
+              COALESCE(st.used_bytes, 0) AS used_bytes,
+              st.quota_bytes AS quota_bytes
+       FROM campus_license_seats s
+       LEFT JOIN student_storage st
+         ON st.tenant_id = s.tenant_id AND st.student_id = s.user_id
+       WHERE s.tenant_id = ?
+       ORDER BY s.activated_at`,
       [tenantId]
     );
   }

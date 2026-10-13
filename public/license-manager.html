@@ -47,11 +47,31 @@
     <section class="grid">
       <article class="card">
         <h3>Products</h3>
-        <ul id="products"></ul>
+        <div id="products" class="cards"></div>
       </article>
       <article class="card">
         <h3>Devices</h3>
-        <ul id="devices"></ul>
+        <table>
+          <thead>
+            <tr><th>Device</th><th>Type</th><th>Security</th><th>Last valid check</th></tr>
+          </thead>
+          <tbody id="devices"></tbody>
+        </table>
+      </article>
+    </section>
+    <section class="grid">
+      <article class="card">
+        <h3>Students</h3>
+        <table>
+          <thead>
+            <tr><th>Student</th><th>Seat activated</th><th>Files</th></tr>
+          </thead>
+          <tbody id="students"></tbody>
+        </table>
+      </article>
+      <article class="card">
+        <h3>Billing</h3>
+        <p id="billing" class="muted"></p>
       </article>
     </section>
     <section class="card">

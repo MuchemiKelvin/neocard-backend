@@ -14,13 +14,17 @@ function formatDate(value) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function fillList(element, items, emptyText) {
-  element.replaceChildren();
-  const values = items.length ? items : [emptyText];
-  values.forEach((value) => {
-    const item = document.createElement("li");
-    item.textContent = value;
-    element.appendChild(item);
+function fillTable(body, rows, columns, emptyCells) {
+  body.replaceChildren();
+  const values = rows.length ? rows : [emptyCells];
+  values.forEach((item) => {
+    const row = document.createElement("tr");
+    columns.forEach((column) => {
+      const cell = document.createElement("td");
+      cell.textContent = column(item);
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
   });
 }
 
@@ -43,8 +47,64 @@ function render(license, activity) {
     ? (license.storage_used_gb / license.storage_quota_gb) * 100
     : 0;
   document.querySelector("#storage-bar").style.width = `${Math.min(storageRatio, 100)}%`;
-  fillList(document.querySelector("#products"), license.products || [], "No products on this license");
-  fillList(document.querySelector("#devices"), license.devices || [], "No devices linked");
+  const products = document.querySelector("#products");
+  products.replaceChildren();
+  const cards = license.product_cards?.length
+    ? license.product_cards
+    : (license.products || []).map((product) => ({ product, summary: "" }));
+  if (!cards.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No products on this license";
+    products.appendChild(empty);
+  }
+  cards.forEach((card) => {
+    const item = document.createElement("article");
+    item.className = "product";
+    const name = document.createElement("strong");
+    name.textContent = card.product;
+    const summary = document.createElement("p");
+    summary.className = "muted";
+    summary.textContent = card.summary || "";
+    item.append(name, summary);
+    products.appendChild(item);
+  });
+
+  const details = license.device_details || (license.devices || []).map((deviceId) => ({
+    device_id: deviceId,
+    device_type: "—",
+    security_status: "—",
+    last_valid_at: null
+  }));
+  fillTable(
+    document.querySelector("#devices"),
+    details,
+    [
+      (item) => item.device_name || item.device_id,
+      (item) => item.device_type || "—",
+      (item) => item.security_status || "—",
+      (item) => formatDate(item.last_valid_at)
+    ],
+    { device_id: "No devices linked", device_type: "—", security_status: "—", last_valid_at: null }
+  );
+  fillTable(
+    document.querySelector("#students"),
+    license.students || [],
+    [
+      (item) => item.user_id,
+      (item) => formatDate(item.activated_at),
+      (item) => item.used_bytes == null ? "—" : `${item.used_bytes} bytes`
+    ],
+    { user_id: "No seats are activated", activated_at: null, used_bytes: null }
+  );
+  const files = license.student_files || [];
+  const invoices = license.invoices || [];
+  const payments = license.payments || [];
+  document.querySelector("#billing").textContent = invoices.length || payments.length
+    ? `${invoices.length} invoices, ${payments.length} payments`
+    : files.length
+      ? `${files.length} student file${files.length === 1 ? "" : "s"} stored. No invoice or payment is stored on this license.`
+      : "No invoice or payment is stored on this license.";
 
   const body = document.querySelector("#activity");
   body.replaceChildren();

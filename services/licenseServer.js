@@ -10,6 +10,13 @@ const PRODUCTS = Object.freeze([
   'NEOCARD',
   'NEOGLASS'
 ]);
+const PRODUCT_COPY = Object.freeze({
+  NEOSCHOOL: 'Lessons and class activity for this school',
+  APP_BUILDER: 'Lesson drafts created for this school',
+  SPONSOR_ENGINE: 'Sponsor campaigns linked to this school',
+  NEOCARD: 'Card scans and check-in for this school',
+  NEOGLASS: 'NeoGlass devices linked to this school'
+});
 
 class LicenseError extends Error {
   constructor(status, message, code, details = {}) {
@@ -84,6 +91,9 @@ class LicenseServer {
     const entitlements = await database.listCampusEntitlements(tenantId);
     const activeSeats = await database.countCampusSeats(tenantId);
     const devices = await database.listCampusDevices(tenantId);
+    const deviceDetails = await database.listCampusDeviceDetails(tenantId);
+    const seats = await database.listCampusSeats(tenantId);
+    const files = await database.listStudentFiles(tenantId);
     return {
       tenant_id: license.tenant_id,
       school_name: license.school_name,
@@ -99,7 +109,27 @@ class LicenseServer {
         ? Math.round((license.storage_quota_gb / license.seat_limit) * 100) / 100
         : null,
       products: entitlements.map((row) => row.product),
-      devices: devices.map((row) => row.device_id)
+      product_cards: entitlements.map((row) => ({
+        product: row.product,
+        summary: PRODUCT_COPY[row.product] || row.product
+      })),
+      devices: devices.map((row) => row.device_id),
+      device_details: deviceDetails.map((row) => ({
+        device_id: row.device_id,
+        device_name: row.device_name || row.device_id,
+        device_type: row.device_type || null,
+        security_status: row.security_status || 'ACTIVE',
+        last_valid_at: row.last_valid_at || null
+      })),
+      students: seats.map((row) => ({
+        user_id: row.user_id,
+        activated_at: row.activated_at,
+        used_bytes: row.used_bytes,
+        quota_bytes: row.quota_bytes
+      })),
+      student_files: files,
+      invoices: [],
+      payments: []
     };
   }
 
