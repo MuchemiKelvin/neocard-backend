@@ -58,6 +58,7 @@ app.use('/v1/device-security', require('../routes/deviceSecurity'));
 app.use('/v1/license', require('../routes/license'));
 app.use('/v1/analytics', require('../routes/analytics'));
 app.use('/v1', require('../routes/backup'));
+app.use('/v1', require('../routes/templates'));
 app.use('/v1/ai', require('../routes/ultraAi'));
 app.use('/v1/app-builder', require('../routes/appBuilder'));
 app.use('/v1/homework', require('../routes/homework'));

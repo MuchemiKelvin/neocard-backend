@@ -603,6 +603,31 @@ class Database {
       )
     `);
     await this.execSql(`
+      CREATE TABLE IF NOT EXISTS template_versions (
+        template_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        checksum TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        b2_file_id TEXT NOT NULL,
+        b2_file_name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (template_id, version)
+      )
+    `);
+    await this.execSql(`
+      CREATE TABLE IF NOT EXISTS template_deliveries (
+        delivery_id TEXT PRIMARY KEY,
+        template_id TEXT NOT NULL,
+        tenant_id TEXT NOT NULL,
+        device_id TEXT,
+        version INTEGER NOT NULL,
+        checksum TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await this.execSql(`
       CREATE TABLE IF NOT EXISTS student_files (
         file_id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,
@@ -1006,6 +1031,51 @@ class Database {
       [tenantId, studentId, quotaBytes]
     );
     return this.getStudentStorage(tenantId, studentId);
+  }
+
+  async nextTemplateVersion(templateId) {
+    const row = await this.getSql(
+      'SELECT COALESCE(MAX(version), 0) AS version FROM template_versions WHERE template_id = ?',
+      [templateId]
+    );
+    return (row ? row.version : 0) + 1;
+  }
+
+  async insertTemplateVersion(version) {
+    await this.runSql(
+      `INSERT INTO template_versions (
+         template_id, version, tenant_id, name, checksum, size_bytes, b2_file_id, b2_file_name, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        version.template_id, version.version, version.tenant_id, version.name,
+        version.checksum, version.size_bytes, version.b2_file_id, version.b2_file_name, version.created_at
+      ]
+    );
+  }
+
+  async getTemplateVersion(templateId, version) {
+    if (version) {
+      return this.getSql(
+        'SELECT * FROM template_versions WHERE template_id = ? AND version = ?',
+        [templateId, version]
+      );
+    }
+    return this.getSql(
+      'SELECT * FROM template_versions WHERE template_id = ? ORDER BY version DESC LIMIT 1',
+      [templateId]
+    );
+  }
+
+  async insertTemplateDelivery(delivery) {
+    await this.runSql(
+      `INSERT INTO template_deliveries (
+         delivery_id, template_id, tenant_id, device_id, version, checksum, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        delivery.delivery_id, delivery.template_id, delivery.tenant_id,
+        delivery.device_id, delivery.version, delivery.checksum, delivery.created_at
+      ]
+    );
   }
 
   async insertStudentFile(file) {
