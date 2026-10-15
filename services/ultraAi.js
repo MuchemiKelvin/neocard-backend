@@ -6,6 +6,7 @@ const USE_CASES = {
   lesson: 'lesson',
   neoschool: 'lesson',
   app_builder: 'lesson',
+  homework: 'homework',
   sponsor: 'sponsor',
   neocard: 'card'
 };

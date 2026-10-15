@@ -74,6 +74,7 @@ app.use('/v1/device-security', require('./routes/deviceSecurity'));
 app.use('/v1', require('./routes/backup'));
 app.use('/v1/ai', require('./routes/ultraAi'));
 app.use('/v1/app-builder', require('./routes/appBuilder'));
+app.use('/v1/homework', require('./routes/homework'));
 
 // Sponsor Analytics and Analytics V1 share one event record
 app.use('/v1/analytics', require('./routes/analytics'));

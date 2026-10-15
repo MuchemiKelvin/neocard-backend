@@ -60,6 +60,7 @@ app.use('/v1/analytics', require('../routes/analytics'));
 app.use('/v1', require('../routes/backup'));
 app.use('/v1/ai', require('../routes/ultraAi'));
 app.use('/v1/app-builder', require('../routes/appBuilder'));
+app.use('/v1/homework', require('../routes/homework'));
 
 // 404 handler
 app.use('*', (req, res) => {
