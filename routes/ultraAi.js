@@ -55,6 +55,8 @@ router.get('/usage', authenticateCaller, async (req, res) => {
         use_case: row.use_case,
         provider_status: row.provider_status,
         cost: row.cost,
+        input_tokens: row.input_tokens,
+        output_tokens: row.output_tokens,
         error: row.error,
         created_at: row.created_at
       }))

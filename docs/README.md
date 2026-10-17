@@ -13,4 +13,5 @@
 |----------|--------|
 | [NEOCARE_INTEGRATION.md](./NEOCARE_INTEGRATION.md) | NeoCare dashboard integration |
 | [AI_API_DOCUMENTATION.md](./AI_API_DOCUMENTATION.md) | AI `/ai/*` detail |
+| [GEMINI_INTEGRATION.md](./GEMINI_INTEGRATION.md) | Gemini Flash on `POST /v1/ai/complete` |
 | [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md) | Hosting / deployment |

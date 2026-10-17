@@ -1,5 +1,6 @@
 const database = require('../database');
 const licenseServer = require('./licenseServer');
+const gemini = require('./gemini');
 const { generateId } = require('../config/neocareAi');
 
 const USE_CASES = {
@@ -21,14 +22,7 @@ class UltraAiError extends Error {
 }
 
 function providerSettings() {
-  const url = process.env.AI_PROVIDER_URL || '';
-  const placeholder = !url || url.includes('api.ai-provider.com');
-  return {
-    mode: process.env.AI_MODE || 'mock',
-    apiKey: process.env.AI_PROVIDER_API_KEY || '',
-    url,
-    placeholder
-  };
+  return { mode: process.env.AI_MODE || 'mock' };
 }
 
 function useCaseFor(moduleName) {
@@ -58,36 +52,41 @@ class UltraAi {
     const createdAt = new Date().toISOString();
 
     if (settings.mode === 'live') {
-      const failure = !settings.apiKey || settings.placeholder
-        ? 'No AI provider is configured.'
-        : null;
-      let providerError = failure;
-      let providerText = null;
-      if (!providerError) {
-        try {
-          const response = await fetch(settings.url, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              authorization: `Bearer ${settings.apiKey}`
-            },
-            body: JSON.stringify({
-              tenant_id: tenantId,
-              user_id: userId,
-              role,
-              module: moduleName,
-              use_case: useCase,
-              prompt: input.prompt || ''
-            }),
-            signal: AbortSignal.timeout(8000)
-          });
-          if (!response.ok) providerError = `Provider returned ${response.status}.`;
-          else providerText = await response.text();
-        } catch (error) {
-          providerError = 'Provider call failed.';
-        }
-      }
-      if (providerError) {
+      try {
+        const generated = await gemini.generate(input.prompt);
+        const cost = gemini.estimateEur(generated.inputTokens, generated.outputTokens);
+        await database.insertAiUsageLog({
+          id,
+          tenant_id: tenantId,
+          user_id: userId,
+          role,
+          module: moduleName,
+          use_case: useCase,
+          provider_status: 'SUCCESS',
+          result: generated.text,
+          cost,
+          input_tokens: generated.inputTokens,
+          output_tokens: generated.outputTokens,
+          error: null,
+          created_at: createdAt
+        });
+        return {
+          id,
+          tenant_id: tenantId,
+          user_id: userId,
+          role,
+          module: moduleName,
+          use_case: useCase,
+          source: 'gemini',
+          result: generated.text,
+          cost,
+          input_tokens: generated.inputTokens,
+          output_tokens: generated.outputTokens
+        };
+      } catch (error) {
+        const message = error.code === 'PROVIDER_UNAVAILABLE'
+          ? error.message
+          : 'Provider call failed.';
         await database.insertAiUsageLog({
           id,
           tenant_id: tenantId,
@@ -98,35 +97,13 @@ class UltraAi {
           provider_status: 'FAILED',
           result: null,
           cost: null,
-          error: providerError,
+          input_tokens: null,
+          output_tokens: null,
+          error: message,
           created_at: createdAt
         });
-        throw new UltraAiError(502, providerError, 'PROVIDER_UNAVAILABLE');
+        throw new UltraAiError(502, message, 'PROVIDER_UNAVAILABLE');
       }
-      await database.insertAiUsageLog({
-        id,
-        tenant_id: tenantId,
-        user_id: userId,
-        role,
-        module: moduleName,
-        use_case: useCase,
-        provider_status: 'SUCCESS',
-        result: providerText,
-        cost: null,
-        error: null,
-        created_at: createdAt
-      });
-      return {
-        id,
-        tenant_id: tenantId,
-        user_id: userId,
-        role,
-        module: moduleName,
-        use_case: useCase,
-        source: 'provider',
-        result: providerText,
-        cost: null
-      };
     }
 
     const result = input.prompt
@@ -142,6 +119,8 @@ class UltraAi {
       provider_status: 'MOCK',
       result,
       cost: 0,
+      input_tokens: 0,
+      output_tokens: 0,
       error: null,
       created_at: createdAt
     });

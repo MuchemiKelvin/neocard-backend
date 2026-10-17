@@ -102,6 +102,7 @@ describe('Ultra AI and App Builder', () => {
     const previousMode = process.env.AI_MODE;
     process.env.AI_MODE = 'live';
     delete process.env.AI_PROVIDER_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     try {
       const response = await request(app)
         .post('/v1/ai/complete')
@@ -120,6 +121,52 @@ describe('Ultra AI and App Builder', () => {
     } finally {
       if (previousMode == null) delete process.env.AI_MODE;
       else process.env.AI_MODE = previousMode;
+    }
+  });
+
+  test('a live Gemini call records tokens and cost and stays off the client', async () => {
+    const previousMode = process.env.AI_MODE;
+    const previousKey = process.env.GEMINI_API_KEY;
+    process.env.AI_MODE = 'live';
+    process.env.GEMINI_API_KEY = 'test-key';
+    try {
+      const response = await request(app)
+        .post('/v1/ai/complete')
+        .set('x-api-key', ADMIN_KEY)
+        .send({
+          tenant_id: 'SCHOOL-AI-A',
+          user_id: 'teacher-1',
+          role: 'teacher',
+          module: 'app_builder',
+          prompt: 'Create a Mathematics Grade 2 lesson about addition.'
+        });
+      expect(response.status).toBe(200);
+      expect(response.body.data.source).toBe('gemini');
+      expect(response.body.data.input_tokens).toBe(12);
+      expect(response.body.data.output_tokens).toBe(20);
+      expect(response.body.data.cost).toBeGreaterThan(0);
+      expect(JSON.stringify(response.body)).not.toContain('test-key');
+
+      const lesson = await request(app)
+        .post('/v1/app-builder/lessons')
+        .set('x-api-key', ADMIN_KEY)
+        .send({
+          tenant_id: 'SCHOOL-AI-A',
+          user_id: 'teacher-1',
+          role: 'teacher',
+          grade: '2',
+          subject: 'Mathematics',
+          topic: 'Addition'
+        });
+      expect(lesson.status).toBe(201);
+      expect(lesson.body.data.source).toBe('gemini');
+      expect(lesson.body.data.lesson.content).toContain('Gemini draft');
+      expect(JSON.stringify(lesson.body)).not.toContain('test-key');
+    } finally {
+      if (previousMode == null) delete process.env.AI_MODE;
+      else process.env.AI_MODE = previousMode;
+      if (previousKey == null) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previousKey;
     }
   });
 

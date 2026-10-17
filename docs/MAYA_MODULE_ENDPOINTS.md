@@ -20,7 +20,7 @@ The Ultra AI Core is the only AI entry point. Homework and App Builder call it. 
 }
 ```
 
-Success returns `data.tenant_id`, `data.user_id`, `data.role`, `data.module`, `data.use_case`, `data.source`, `data.result`, and `data.cost`. With no provider connected, `source` is `mock` and `cost` is `0`.
+Success returns `data.tenant_id`, `data.user_id`, `data.role`, `data.module`, `data.use_case`, `data.source`, `data.result`, and `data.cost`. Live Gemini also returns `data.input_tokens` and `data.output_tokens`, and `source` is `gemini`. With `AI_MODE` left at `mock`, `source` is `mock` and `cost` is `0`. See [GEMINI_INTEGRATION.md](./GEMINI_INTEGRATION.md).
 
 `GET /v1/ai/usage?tenant_id=SCHOOL-GREENFIELD` lists those calls for one school.
 
@@ -115,7 +115,7 @@ Each student quota is 20 GB. The quota view returns `warning_level` of `NORMAL`,
 }
 ```
 
-Creating a lesson calls the Core with module `app_builder`. The current `source` is `mock`.
+Creating a lesson calls the Core with module `app_builder`. In live mode `source` is `gemini` and `lesson.content` is Gemini's text. In mock mode `source` is `mock`.
 
 `GET /v1/app-builder/lessons/:lessonId`
 

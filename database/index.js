@@ -649,10 +649,14 @@ class Database {
         provider_status TEXT NOT NULL,
         result TEXT,
         cost REAL,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
         error TEXT,
         created_at TEXT NOT NULL
       )
     `);
+    await this.addColumnIfMissing('ai_usage_logs', 'input_tokens', 'INTEGER');
+    await this.addColumnIfMissing('ai_usage_logs', 'output_tokens', 'INTEGER');
     await this.execSql(`
       CREATE TABLE IF NOT EXISTS app_lessons (
         lesson_id TEXT PRIMARY KEY,
@@ -1111,12 +1115,13 @@ class Database {
     await this.runSql(
       `INSERT INTO ai_usage_logs (
          id, tenant_id, user_id, role, module, use_case, provider_status,
-         result, cost, error, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         result, cost, input_tokens, output_tokens, error, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id, entry.tenant_id, entry.user_id, entry.role, entry.module,
         entry.use_case, entry.provider_status, entry.result || null,
-        entry.cost ?? null, entry.error || null, entry.created_at
+        entry.cost ?? null, entry.input_tokens ?? null, entry.output_tokens ?? null,
+        entry.error || null, entry.created_at
       ]
     );
   }

@@ -12,7 +12,7 @@ class AppBuilderError extends Error {
   }
 }
 
-function draftLesson(input, source) {
+function draftLesson(input, source, content) {
   const grade = String(input.grade || '2');
   const topic = String(input.topic || 'Addition');
   const subject = String(input.subject || 'Mathematics');
@@ -26,6 +26,7 @@ function draftLesson(input, source) {
       'Ask the learner to try one item.',
       'Check the answer with the learner.'
     ],
+    content: content || null,
     source
   };
 }
@@ -60,7 +61,7 @@ class AppBuilder {
       user_id: completion.user_id,
       role: completion.role,
       status: 'DRAFT',
-      lesson_json: JSON.stringify(draftLesson(input, completion.source)),
+      lesson_json: JSON.stringify(draftLesson(input, completion.source, completion.result)),
       source: completion.source,
       created_at: now,
       updated_at: now
