@@ -1,8 +1,11 @@
 const crypto = require('crypto');
 const database = require('../database');
+const licenseServer = require('./licenseServer');
 const { FingerprintValidationError } = require('./fingerprintValidation');
 const { assertScanAllowed } = require('./antiFraud');
 const deviceSecurity = require('./deviceSecurity');
+
+const CARD_ROLES = Object.freeze(['teacher', 'student']);
 
 const TRANSACTION_TYPES = Object.freeze([
   'CHECK_IN',
@@ -43,7 +46,7 @@ class NeoCardTransactionService {
     return `TXN-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
   }
 
-  _formatResponse(stored, first_name, last_name) {
+  _formatResponse(stored, first_name, last_name, role) {
     let metadata = stored.metadata || null;
     if (typeof metadata === 'string') {
       try {
@@ -60,6 +63,7 @@ class NeoCardTransactionService {
         name: `${first_name || ''} ${last_name || ''}`.trim(),
         first_name: first_name || null,
         last_name: last_name || null,
+        role: role || null,
         type: 'User'
       },
       transaction: {
@@ -153,22 +157,40 @@ class NeoCardTransactionService {
         return this._formatResponse(
           existing,
           user?.first_name,
-          user?.last_name
+          user?.last_name,
+          user?.role_code
         );
       }
     }
 
-    const cardUid = payload.uid || payload.neocard_uid || payload.neocardUid || null;
-    if (cardUid) {
-      await assertScanAllowed(cardUid);
-    }
+    let cardUid = payload.uid || payload.neocard_uid || payload.neocardUid || null;
 
     await deviceSecurity.assertRiskBearingAllowed(device_id);
 
-    let user_id = user_id_hint;
+    let user_id = null;
     let first_name = null;
     let last_name = null;
-    let slot = fingerprint_slot != null ? Number(fingerprint_slot) : null;
+    let roleCode = null;
+    let slot = fingerprint_slot != null && fingerprint_slot !== '' ? Number(fingerprint_slot) : null;
+    const nfcOnly = Boolean(cardUid) && !verification_id && slot == null;
+
+    if (nfcOnly) {
+      const holder = await this.resolveCard(
+        cardUid,
+        device_id,
+        payload.tenant_id || payload.tenantId || null,
+        user_id_hint
+      );
+      user_id = holder.user_id;
+      first_name = holder.first_name;
+      last_name = holder.last_name;
+      roleCode = holder.role_code;
+      cardUid = holder.neocard_uid;
+      await assertScanAllowed(cardUid);
+    } else {
+      user_id = user_id_hint;
+      if (cardUid) await assertScanAllowed(cardUid);
+    }
 
     if (verification_id) {
       const logs = await database.getVerificationLogs({
@@ -244,12 +266,14 @@ class NeoCardTransactionService {
       }
       first_name = user.first_name;
       last_name = user.last_name;
+      roleCode = roleCode || user.role_code || null;
       if (!cardUid && user.neocard_uid) {
         await assertScanAllowed(user.neocard_uid);
       }
     }
 
     const transaction_id = clientTransactionId || this.generateTransactionId();
+    const method = nfcOnly && verification_method === 'FINGERPRINT' ? 'NFC' : verification_method;
     const created = await database.createNeocardTransaction({
       transaction_id,
       transaction_type,
@@ -258,14 +282,87 @@ class NeoCardTransactionService {
       user_id,
       verification_id,
       fingerprint_slot: slot,
-      verification_method,
+      verification_method: method,
       metadata,
       occurred_at: timestamp,
       verified_at: timestamp
     });
 
+    if (nfcOnly) {
+      await database.insertScan({
+        scan_id: `scan_${transaction_id}`,
+        uid: cardUid,
+        campaign_id: 'SCHOOL_CHECK_IN',
+        timestamp: timestamp || new Date().toISOString(),
+        checksum: crypto.createHash('sha256').update(`${cardUid}|${transaction_id}`).digest('hex'),
+        verified: 1
+      });
+    }
+
     const stored = await database.getNeocardTransaction(transaction_id);
-    return this._formatResponse(stored || created, first_name, last_name);
+    return this._formatResponse(stored || created, first_name, last_name, roleCode);
+  }
+
+  async resolveCard(cardUid, deviceId, tenantId, userIdHint) {
+    const match = await database.getUserByNeocardUid(cardUid);
+    if (Array.isArray(match)) {
+      throw new FingerprintValidationError(
+        409,
+        'Card is assigned to more than one user.',
+        'CARD_AMBIGUOUS'
+      );
+    }
+    if (!match) {
+      throw new FingerprintValidationError(404, 'Card is not assigned to a user.', 'CARD_NOT_ASSIGNED');
+    }
+    if (!(match.active === 1 || match.active === true)) {
+      throw new FingerprintValidationError(403, 'User inactive', 'USER_INACTIVE');
+    }
+    const role = String(match.role_code || '').toLowerCase();
+    if (!CARD_ROLES.includes(role)) {
+      throw new FingerprintValidationError(
+        403,
+        'Role is not allowed for card check-in.',
+        'ROLE_NOT_AUTHORIZED'
+      );
+    }
+    if (userIdHint && userIdHint !== match.user_id) {
+      throw new FingerprintValidationError(403, 'Card does not match the supplied user.', 'USER_MISMATCH');
+    }
+
+    let schoolId = tenantId ? String(tenantId).trim() : '';
+    if (!schoolId) {
+      const schools = await database.listTenantIdsForDevice(deviceId);
+      if (schools.length === 1) schoolId = schools[0];
+      else if (schools.length === 0) {
+        throw new FingerprintValidationError(
+          403,
+          'Device is not authorized for a school.',
+          'DEVICE_NOT_AUTHORIZED'
+        );
+      } else {
+        throw new FingerprintValidationError(400, 'tenant_id is required.', 'MISSING_FIELD');
+      }
+    }
+
+    await licenseServer.validate({
+      tenant_id: schoolId,
+      user_id: match.user_id,
+      product: 'NEOCARD',
+      device_id: deviceId,
+      action: 'check'
+    }, { admin: false, deviceId });
+
+    const seat = await database.getCampusSeat(schoolId, match.user_id);
+    if (!seat) {
+      throw new FingerprintValidationError(
+        403,
+        'User has no active seat at this school.',
+        'SEAT_NOT_ACTIVE'
+      );
+    }
+
+    return match;
   }
 }
 

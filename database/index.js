@@ -780,7 +780,9 @@ class Database {
       ('ambulance_crew', 'Ambulance Crew', 'Ambulance Personeel', 'Emergency medical services personnel'),
       ('funeral_team', 'Funeral / House-of-Honor Team', 'Uitvaartteam', 'Funeral and end-of-life services team'),
       ('care_farm_staff', 'Care Farm Staff', 'Zorgboerderij', 'Care farm staff providing therapeutic activities'),
-      ('home_chef', 'Home Chef', 'Thuiskok', 'Home chef providing meal preparation services');
+      ('home_chef', 'Home Chef', 'Thuiskok', 'Home chef providing meal preparation services'),
+      ('teacher', 'Teacher', 'Docent', 'School teacher'),
+      ('student', 'Student', 'Leerling', 'School student');
     `;
 
     return new Promise((resolve, reject) => {
@@ -1420,6 +1422,23 @@ class Database {
         }
       });
     });
+  }
+
+  async getUserByNeocardUid(uid) {
+    const sql = `
+      SELECT u.*, cr.role_code, cr.role_name, cr.role_name_nl
+      FROM users u
+      LEFT JOIN care_roles cr ON u.role_id = cr.id
+      WHERE lower(u.neocard_uid) = lower(?)
+    `;
+    const rows = await new Promise((resolve, reject) => {
+      this.db.all(sql, [String(uid).trim()], (err, result) => {
+        if (err) reject(err);
+        else resolve(result || []);
+      });
+    });
+    if (rows.length !== 1) return rows.length === 0 ? null : rows;
+    return rows[0];
   }
 
   async getUserByEmail(email) {
@@ -2993,6 +3012,14 @@ class Database {
         [tenantId, deviceId]
       );
     }
+  }
+
+  async listTenantIdsForDevice(deviceId) {
+    const rows = await this.allSql(
+      'SELECT tenant_id FROM campus_license_devices WHERE device_id = ? ORDER BY tenant_id',
+      [deviceId]
+    );
+    return rows.map((row) => row.tenant_id);
   }
 
   async campusDeviceBelongsToTenant(tenantId, deviceId) {
